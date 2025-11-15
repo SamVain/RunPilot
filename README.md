@@ -1,9 +1,12 @@
 # RunPilot
+
 RunPilot is a lightweight orchestration tool for running reproducible AI training jobs.
 
 You define a training run in a simple YAML config. RunPilot handles the boring parts:
-containers, environments, logs, metrics and run history. The goal is to make AI training
-feel predictable and repeatable, whether you are on a laptop or a cluster.
+containers, environments, logs, metrics and run history. The long-term goal is to make AI
+training feel predictable and repeatable, whether you are on a laptop or a cluster.
+
+> Status: Very early. v0.1 is under active development.
 
 ---
 
@@ -30,6 +33,44 @@ The first version of RunPilot focuses on a very small but solid feature set:
 - A lightweight run history stored in SQLite
 
 Details are in [`docs/mvp-v0.1.md`](docs/mvp-v0.1.md).
+
+---
+
+## Quickstart (dev)
+
+### 1. Clone the repo
+```bash
+git clone git@github.com:SamVain/RunPilot.git
+cd RunPilot
+```
+### 2. Create a virtual environment
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install RunPilot in editable mode
+```bash
+python -m pip install --upgrade pip
+python -m pip install -e .
+
+```
+
+### 4. Create a simple example config
+```yaml
+# example.yaml
+name: hello-run
+image: "python:3.11-slim"
+entrypoint: "python -c 'print(\"hello from RunPilot stub\")'"
+```
+
+### 5. Run it!
+```bash
+runpilot run example.yaml
+```
+
+Right now, this will just print what it would do. Future versions will actually run
+containers, capture logs, metrics and store run history.
 
 ---
 
