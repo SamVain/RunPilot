@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .config import load_config
+from .config import load_config, resolve_config_path
 from .runner import run_local_container
 from .storage import (
     create_run_dir,
@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "run":
-        _handle_run_command(Path(args.config_path))
+        _handle_run_command(args.config_path)
         return 0
 
     if args.command == "list":
@@ -136,7 +136,9 @@ def main(argv: list[str] | None = None) -> int:
     return 1
 
 
-def _handle_run_command(config_path: Path) -> None:
+def _handle_run_command(config_ref: str) -> None:
+    # Resolve either a direct path or a named run from runpilot.yaml
+    config_path = resolve_config_path(config_ref)
     cfg = load_config(config_path)
     print(
         f"[RunPilot] Loaded config for run '{cfg.name}' "

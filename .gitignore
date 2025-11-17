@@ -28,3 +28,10 @@ Thumbs.db
 
 # Project-specific ignores
 example.yaml
+# Ignore
+hello-run.tar.gz
+runpilot.yaml
+
+# Ignore
+hello-run.tar.gz
+runpilot.yaml
