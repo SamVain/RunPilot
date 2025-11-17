@@ -11,6 +11,15 @@ from .storage import (
     load_all_runs,
     load_run,
 )
+from .config import load_config
+from .runner import run_local_container
+from .storage import (
+    create_run_dir,
+    write_run_metadata,
+    load_all_runs,
+    load_run,
+)
+from .metrics import parse_metrics_from_log, write_metrics
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -85,6 +94,13 @@ def _handle_run_command(config_path: Path) -> None:
     # Update metadata based on exit code
     final_status = "finished" if exit_code == 0 else "failed"
     write_run_metadata(run_dir, cfg, status=final_status, exit_code=exit_code)
+    
+    # Extract metrics from logs if present
+    log_path = run_dir / "logs.txt"
+    metrics = parse_metrics_from_log(log_path)
+    if metrics:
+        write_metrics(run_dir, metrics)
+        print(f"[RunPilot] Metrics written to {run_dir / 'metrics.json'}")
 
     print(f"[RunPilot] Run completed with exit code {exit_code}")
     print(f"[RunPilot] Metadata written to {run_dir / 'run.json'}")
