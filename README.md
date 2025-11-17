@@ -2,11 +2,17 @@
 
 RunPilot is a lightweight orchestration tool for running reproducible AI training jobs.
 
-You define a training run in a simple YAML config. RunPilot handles the boring parts:
-containers, environments, logs, metrics and run history. The long-term goal is to make AI
-training feel predictable and repeatable, whether you are on a laptop or a cluster.
+You define a training run using a simple YAML config. RunPilot then creates an isolated run directory, executes the run using a container engine (when available), captures logs, records metadata, and gives you a searchable history of previous runs.
 
-> Status: Very early. v0.1 is under active development.
+This repository is the open-source core. \
+The long-term plan is:
+
+- free, open core CLI + local runner here
+
+- paid RunPilot Cloud for remote execution, dashboards, teams, RBAC, SSO, audit, enterprise support
+
+Status: Early v0.1 \
+Runs execute locally. If Docker is missing, RunPilot gracefully falls back and still records a failed run with logs stored.
 
 ---
 
@@ -14,25 +20,31 @@ training feel predictable and repeatable, whether you are on a laptop or a clust
 RunPilot should become the easiest way to:
 
 - Define a training run in a single config file
-- Run that training job locally in a container
-- Capture logs and metrics in a structured way
-- Keep a history of runs for comparison and reproducibility
-- Later: extend the same flow to remote servers and clusters
+- Run that job locally in a container with reproducibility by default
+- Capture logs and metrics automatically
+- Keep a searchable history of runs for comparison and auditing
+- Seamlessly scale the same workflow to cloud or cluster execution
 
-Think of it as Docker Compose for AI training jobs.
+In short: `Docker Compose` for machine learning training experiments.
 
-## v0.1 MVP
+## v0.1 Features (current)
 
-The first version of RunPilot focuses on a very small but solid feature set:
+This initial milestone includes:
 
-- A `runpilot` CLI
-- A YAML based run configuration format
-- Local Docker or Podman based execution of training jobs
-- Streaming logs to the console and saving them per run
-- Simple metrics extraction from stdout and saving to a file
-- A lightweight run history stored in SQLite
+- `runpilot run <config.yaml>`
+- `runpilot list` (show run history)
+- `runpilot show <run_id>` (view one run)
+- YAML-based config validation
+- Per-run directory under: `~/.runpilot/runs/<run_id>/`
+- `run.json` metadata: timestamps, exit code, status, image, entrypoint
+- `logs.txt` capturing all stdout/stderr
+- Docker-based execution if available, fallback if not
+- Tests for config, metadata, runner, metrics parsing (WIP)
 
-Details are in [`docs/mvp-v0.1.md`](docs/mvp-v0.1.md).
+Upcoming soon:
+- Metrics extraction into metrics.json
+- Improved CLI formatting / filters
+- Optional SQLite backend (planned, not implemented)
 
 ---
 
@@ -61,7 +73,7 @@ python -m pip install -e .
 # example.yaml
 name: hello-run
 image: "python:3.11-slim"
-entrypoint: "python -c 'print(\"hello from RunPilot stub\")'"
+entrypoint: "python -c 'print("hello from RunPilot stub")'"
 ```
 
 ### 5. Run it!
@@ -69,8 +81,8 @@ entrypoint: "python -c 'print(\"hello from RunPilot stub\")'"
 runpilot run example.yaml
 ```
 
-Right now, this will just print what it would do. Future versions will actually run
-containers, capture logs, metrics and store run history.
+Results will appear under:
+`~/.runpilot/runs/<run_id>`
 
 ---
 
@@ -106,13 +118,13 @@ metrics:
 ---
 
 ## Project Status
-RunPilot is currently in the design and prototyping phase.
-Our current goals are to:
-- Define a vision and scope
-- lock in the v0.1 MVP
-- Set up a basic project structure and tooling
+RunPilot is currently in the early foundation stage.
+The goals are to:
 
-If you find this repo and it looks empty, it just means the work is still in the very early stages.
+- Deliver a stable local runner
+- Support metrics logging and search
+- Refine the CLI and UX
+- Prepare for future cloud execution model
 
 ---
 
