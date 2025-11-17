@@ -15,6 +15,8 @@ from .storage import (
 from .metrics import parse_metrics_from_log, write_metrics
 from .cli_metrics import metrics_command
 from .archive import export_run, import_run, RunNotFoundError
+from .cloud_config import CloudConfig, load_cloud_config, save_cloud_config
+from .paths import get_run_dir
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -104,6 +106,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Overwrite existing run directory if it already exists",
     )
 
+    # login subcommand
+    login_parser = subparsers.add_parser(
+        "login",
+        help="Configure RunPilot Cloud credentials",
+    )
+    
+    login_parser.add_argument(
+        "--api-base-url",
+        help="Base URL for the RunPilot Cloud API (for example: https://api.runpilot.dev)",
+    )
+    login_parser.add_argument(
+        "--token",
+        help="API token for RunPilot Cloud",
+    )
+    login_parser.add_argument(
+        "--project",
+        help="Default project name or identifier",
+    )
+
+    # sync subcommand
+    sync_parser = subparsers.add_parser(
+        "sync",
+        help="Sync a local run to RunPilot Cloud (skeleton, no real network calls yet)",
+    )
+    sync_parser.add_argument(
+        "run_id",
+        help="Run identifier to sync",
+    )
+
     return parser
 
 
@@ -131,6 +162,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "import":
         return _handle_import_command(Path(args.archive_path), overwrite=args.force)
+
+    if args.command == "login":
+        return _handle_login_command(
+            api_base_url=getattr(args, "api_base_url", None),
+            token=getattr(args, "token", None),
+            default_project=getattr(args, "project", None),
+        )
+
+    if args.command == "sync":
+        return _handle_sync_command(args.run_id)
 
     parser.error(f"Unknown command {args.command!r}")
     return 1
@@ -269,4 +310,85 @@ def _handle_import_command(archive_path: Path, overwrite: bool = False) -> int:
         return 1
 
     print(f"[RunPilot] Imported run {run_id} from {archive_path}")
+    return 0
+
+def _handle_login_command(
+    api_base_url: str | None,
+    token: str | None,
+    default_project: str | None,
+) -> int:
+    """
+    Configure RunPilot Cloud credentials.
+
+    If arguments are missing, prompt interactively.
+    """
+    # Interactive prompts as a fallback for local use
+    if not api_base_url:
+        api_base_url = input("RunPilot Cloud API base URL (for example https://api.runpilot.dev): ").strip()
+    if not token:
+        token = input("RunPilot Cloud API token: ").strip()
+    if not default_project:
+        default_project = input("Default project name (optional, press enter to skip): ").strip() or None
+
+    if not api_base_url or not token:
+        print("[RunPilot] Cloud login aborted, api_base_url and token are required.")
+        return 1
+
+    cfg = CloudConfig(
+        api_base_url=api_base_url,
+        token=token,
+        default_project=default_project,
+    )
+
+    path = save_cloud_config(cfg)
+    print(f"[RunPilot] Cloud configuration written to {path}")
+    return 0
+
+
+def _handle_sync_command(run_id: str) -> int:
+    """
+    Skeleton implementation for `runpilot sync <run-id>`.
+
+    Currently:
+      * Validates run directory exists.
+      * Checks that cloud configuration exists.
+      * Prints a summary of what would be synced.
+      * Does not perform any network calls yet.
+    """
+    cfg = load_cloud_config()
+    if cfg is None:
+        print("[RunPilot] No cloud configuration found.")
+        print("[RunPilot] Run `runpilot login` first to configure RunPilot Cloud.")
+        return 1
+
+    run_dir = get_run_dir(run_id)
+    if not run_dir.exists():
+        print(f"[RunPilot] Run directory not found for id: {run_id}")
+        return 1
+
+    run_json = run_dir / "run.json"
+    metrics_json = run_dir / "metrics.json"
+    logs_txt = run_dir / "logs.txt"
+    outputs_dir = run_dir / "outputs"
+
+    print(f"[RunPilot] Preparing to sync run {run_id} to RunPilot Cloud")
+    print(f"[RunPilot] API base URL: {cfg.api_base_url}")
+    if cfg.default_project:
+        print(f"[RunPilot] Project: {cfg.default_project}")
+
+    print(f"[RunPilot] Files:")
+    print(f"  - run.json      : {'present' if run_json.exists() else 'missing'}")
+    print(f"  - metrics.json  : {'present' if metrics_json.exists() else 'missing'}")
+    print(f"  - logs.txt      : {'present' if logs_txt.exists() else 'missing'}")
+
+    if outputs_dir.exists():
+        artifacts = [p.relative_to(outputs_dir) for p in outputs_dir.rglob("*") if p.is_file()]
+        print(f"  - outputs/      : {len(artifacts)} artifact(s)")
+        for art in artifacts:
+            print(f"      * {art}")
+    else:
+        print("  - outputs/      : none")
+
+    print("[RunPilot] Sync is currently a dry run (no network calls made).")
+    print("[RunPilot] In a future version this will upload metadata, metrics, logs and artifacts.")
     return 0
