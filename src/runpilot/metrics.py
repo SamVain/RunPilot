@@ -1,86 +1,119 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, asdict
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
-def parse_metrics_from_log(log_path: Path) -> Dict[str, Any]:
-    """
-    Parse metrics from a log file.
+METRICS_FILENAME = "metrics.json"
 
-    Convention:
-      Any line starting with 'METRIC ' is treated as JSON.
-      Example:
-        METRIC {"step": 1, "loss": 0.92}
-        METRIC {"step": 2, "loss": 0.81, "accuracy": 0.64}
 
-    Returns a dict of the form:
-      {
-        "loss": [
-          {"step": 1, "value": 0.92},
-          {"step": 2, "value": 0.81}
-        ],
-        "accuracy": [
-          {"step": 2, "value": 0.64}
-        ],
-        "final": {
-          "loss": 0.81,
-          "accuracy": 0.64
-        }
-      }
-    """
-    if not log_path.is_file():
-        return {}
+@dataclass
+class Metrics:
+    run_id: str
+    summary: Dict[str, float]
+    time_series: Dict[str, List[float]] | None = None
+    tags: List[str] | None = None
+    recorded_at: str | None = None
 
-    series: Dict[str, List[Dict[str, Any]]] = {}
-    final_values: Dict[str, Any] = {}
+    def to_dict(self) -> Dict[str, Any]:
+        data = asdict(self)
+        if not self.recorded_at:
+            data["recorded_at"] = datetime.now(timezone.utc).isoformat()
+        return data
+
+
+def metrics_path(run_dir: Path) -> Path:
+    return run_dir / METRICS_FILENAME
+
+
+def write_metrics(
+    run_dir: Path,
+    run_id: str,
+    summary: Dict[str, float],
+    time_series: Dict[str, List[float]] | None = None,
+    tags: List[str] | None = None,
+) -> Path:
+    """Write metrics.json into the run directory."""
+    run_dir = Path(run_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    metrics = Metrics(
+        run_id=run_id,
+        summary=summary,
+        time_series=time_series,
+        tags=tags,
+    )
+
+    path = metrics_path(run_dir)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(metrics.to_dict(), f, indent=2, sort_keys=True)
+
+    return path
+
+
+def read_metrics(run_dir: Path) -> Optional[Dict[str, Any]]:
+    """Return metrics.json as a dict, or None if missing or invalid."""
+    path = metrics_path(Path(run_dir))
+    if not path.exists():
+        return None
 
     try:
-        raw = log_path.read_text(encoding="utf-8").splitlines()
-    except Exception:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def parse_metrics_from_log(log_path: Path) -> Dict[str, float]:
+    """
+    Very simple placeholder implementation.
+
+    Reads the log file and looks for lines of the form:
+
+        METRIC name=value
+
+    For example:
+
+        METRIC train_loss=0.1234
+        METRIC accuracy=0.987
+
+    Returns a dict like {"train_loss": 0.1234, "accuracy": 0.987}.
+
+    If no metrics are found, returns an empty dict.
+    """
+    log_path = Path(log_path)
+    if not log_path.exists():
         return {}
 
-    for idx, line in enumerate(raw, start=1):
-        line = line.strip()
-        if not line.startswith("METRIC "):
-            continue
+    summary: Dict[str, float] = {}
 
-        payload = line[len("METRIC ") :].strip()
-        try:
-            data = json.loads(payload)
-        except json.JSONDecodeError:
-            continue
+    try:
+        with log_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line.startswith("METRIC "):
+                    continue
 
-        if not isinstance(data, dict):
-            continue
+                # Remove "METRIC " prefix
+                metric_part = line[len("METRIC ") :]
 
-        step = data.get("step", idx)
+                if "=" not in metric_part:
+                    continue
 
-        for key, value in data.items():
-            if key == "step":
-                continue
-            series.setdefault(key, []).append({"step": step, "value": value})
-            final_values[key] = value
+                name, value_str = metric_part.split("=", 1)
+                name = name.strip()
+                value_str = value_str.strip()
 
-    if not series:
+                try:
+                    value = float(value_str)
+                except ValueError:
+                    continue
+
+                summary[name] = value
+    except OSError:
         return {}
 
-    return {
-        **{k: v for k, v in series.items()},
-        "final": final_values,
-    }
-
-
-def write_metrics(run_dir: Path, metrics: Dict[str, Any]) -> None:
-    """
-    Write metrics.json into the run directory if there are metrics.
-    """
-    if not metrics:
-        return
-
-    metrics_path = run_dir / "metrics.json"
-    metrics_path.write_text(
-        json.dumps(metrics, indent=2),
-        encoding="utf-8",
-    )
+    return summary

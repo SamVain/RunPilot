@@ -11,24 +11,13 @@ from .storage import (
     load_all_runs,
     load_run,
 )
-from .config import load_config
-from .runner import run_local_container
-from .storage import (
-    create_run_dir,
-    write_run_metadata,
-    load_all_runs,
-    load_run,
-)
 from .metrics import parse_metrics_from_log, write_metrics
+from .cli_metrics import metrics_command
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="runpilot",
-        description="RunPilot - reproducible AI training runner",
-    )
-
-    subparsers = parser.add_subparsers(dest="command")
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="runpilot")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
     # run subcommand
     run_parser = subparsers.add_parser(
@@ -58,21 +47,43 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run id to inspect",
     )
 
+    # metrics subcommand
+    metrics_parser = subparsers.add_parser(
+        "metrics",
+        help="Show metrics for a run",
+    )
+    metrics_parser.add_argument(
+        "run_id",
+        help="Run identifier",
+    )
+    metrics_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print raw metrics.json as JSON",
+    )
+
     return parser
 
 
-def main() -> None:
-    parser = _build_parser()
-    args = parser.parse_args()
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.command == "run":
         _handle_run_command(Path(args.config_path))
-    elif args.command == "list":
+        return 0
+    if args.command == "list":
         _handle_list_command()
-    elif args.command == "show":
+        return 0
+    if args.command == "show":
         _handle_show_command(args.run_id)
-    else:
-        parser.print_help()
+        return 0
+    if args.command == "metrics":
+        return metrics_command(run_id=args.run_id, json_output=args.json)
+
+    # Should not normally reach here
+    parser.error(f"Unknown command {args.command!r}")
+    return 1
 
 
 def _handle_run_command(config_path: Path) -> None:
@@ -94,12 +105,26 @@ def _handle_run_command(config_path: Path) -> None:
     # Update metadata based on exit code
     final_status = "finished" if exit_code == 0 else "failed"
     write_run_metadata(run_dir, cfg, status=final_status, exit_code=exit_code)
-    
+
     # Extract metrics from logs if present
     log_path = run_dir / "logs.txt"
-    metrics = parse_metrics_from_log(log_path)
-    if metrics:
-        write_metrics(run_dir, metrics)
+    parsed_metrics = parse_metrics_from_log(log_path)
+
+    # Build metrics summary
+    summary: dict[str, float] = {}
+
+    # Include any parsed metrics from logs
+    summary.update(parsed_metrics)
+
+    # Always include exit code as a metric
+    try:
+        summary["exit_code"] = float(exit_code)
+    except (TypeError, ValueError):
+        pass
+
+    if summary:
+        run_id = run_dir.name
+        write_metrics(run_dir=run_dir, run_id=run_id, summary=summary)
         print(f"[RunPilot] Metrics written to {run_dir / 'metrics.json'}")
 
     print(f"[RunPilot] Run completed with exit code {exit_code}")
@@ -113,7 +138,7 @@ def _handle_list_command() -> None:
         print("[RunPilot] No runs found.")
         return
 
-    # Simple table: ID (shortened), STATUS, CREATED_AT, EXIT_CODE
+    # Simple table: ID (shortened), STATUS, EXIT, CREATED_AT
     header = f"{'ID':<32} {'STATUS':<10} {'EXIT':<5} {'CREATED_AT'}"
     print(header)
     print("-" * len(header))
