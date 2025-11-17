@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import json
 
@@ -35,7 +34,7 @@ def get_runs_dir() -> Path:
 def _generate_run_id(name: str) -> str:
     """
     Generate a simple run id from timestamp and a slug of the run name.
-    Example: 20250119T142355Z-hello-run
+    Example: 20251119T142355Z-hello-run
     """
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     safe = "".join(
@@ -50,7 +49,7 @@ def _generate_run_id(name: str) -> str:
 def create_run_dir(name: str) -> Path:
     """
     Create a new run directory and return its path.
-    Example: ~/.runpilot/runs/20250119T142355Z-hello-run
+    Example: ~/.runpilot/runs/20251119T142355Z-hello-run
     """
     runs_dir = get_runs_dir()
     run_id = _generate_run_id(name)
@@ -59,22 +58,68 @@ def create_run_dir(name: str) -> Path:
     return run_dir
 
 
-def _build_metadata(cfg: RunConfig, status: str) -> Dict[str, Any]:
-    return {
-        "name": cfg.name,
-        "image": cfg.image,
-        "entrypoint": cfg.entrypoint,
-        "status": status,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-def write_run_metadata(run_dir: Path, cfg: RunConfig, status: str) -> None:
+def _load_existing_metadata(meta_path: Path) -> Dict[str, Any]:
+    if not meta_path.is_file():
+        return {}
+    try:
+        with meta_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+        return {}
+    except Exception:
+        # If metadata is corrupt, start fresh rather than crashing.
+        return {}
+
+
+def write_run_metadata(
+    run_dir: Path,
+    cfg: RunConfig,
+    status: str,
+    exit_code: Optional[int] = None,
+) -> None:
     """
-    Write or overwrite run metadata file in the run directory.
+    Create or update the metadata file for a run.
+
+    Fields:
+      id          run directory name
+      run_dir     absolute path to the run directory
+      name        run name from config
+      image       container image
+      entrypoint  command to run inside the container
+      status      pending, finished, failed
+      created_at  first time metadata was written
+      finished_at set when status is finished or failed
+      exit_code   numeric exit code if known
     """
     meta_path = run_dir / "run.json"
-    meta = _build_metadata(cfg, status=status)
+    meta = _load_existing_metadata(meta_path)
+
+    # Core identity
+    meta["id"] = run_dir.name
+    meta["run_dir"] = str(run_dir)
+
+    # Config fields
+    meta["name"] = cfg.name
+    meta["image"] = cfg.image
+    meta["entrypoint"] = cfg.entrypoint
+
+    # Status
+    meta["status"] = status
+
+    # Timestamps
+    if "created_at" not in meta:
+        meta["created_at"] = _now_iso()
+
+    if exit_code is not None:
+        meta["exit_code"] = exit_code
+
+    if status in {"finished", "failed"}:
+        meta["finished_at"] = _now_iso()
 
     with meta_path.open("w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)

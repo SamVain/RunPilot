@@ -61,12 +61,12 @@ def _handle_run_command(config_path: Path) -> None:
     # Initial metadata
     write_run_metadata(run_dir, cfg, status="pending")
 
-    # Call the stub runner
+    # Call the runner (Docker if available, stub otherwise)
     exit_code = run_local_container(cfg, run_dir)
 
     # Update metadata based on exit code
     final_status = "finished" if exit_code == 0 else "failed"
-    write_run_metadata(run_dir, cfg, status=final_status)
+    write_run_metadata(run_dir, cfg, status=final_status, exit_code=exit_code)
 
     print(f"[RunPilot] Run completed with exit code {exit_code}")
     print(f"[RunPilot] Metadata written to {run_dir / 'run.json'}")
