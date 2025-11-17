@@ -67,28 +67,45 @@ def read_metrics(run_dir: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
-def parse_metrics_from_log(log_path: Path) -> Dict[str, float]:
+def parse_metrics_from_log(log_path: Path) -> Dict[str, Any]:
     """
-    Very simple placeholder implementation.
+    Parse metrics from a log file.
 
-    Reads the log file and looks for lines of the form:
+    Expected primary format (used in tests):
 
-        METRIC name=value
+        METRIC {"step": 1, "loss": 0.92}
+        METRIC {"step": 2, "loss": 0.81, "accuracy": 0.64}
 
-    For example:
+    This produces a structure like:
 
-        METRIC train_loss=0.1234
-        METRIC accuracy=0.987
+        {
+            "loss": [
+                {"step": 1, "value": 0.92},
+                {"step": 2, "value": 0.81},
+            ],
+            "accuracy": [
+                {"step": 2, "value": 0.64},
+            ],
+            "final": {
+                "loss": 0.81,
+                "accuracy": 0.64,
+            },
+        }
 
-    Returns a dict like {"train_loss": 0.1234, "accuracy": 0.987}.
+    Also supports simpler key=value lines:
 
-    If no metrics are found, returns an empty dict.
+        METRIC loss=0.92
+        METRIC loss=0.81
+        METRIC accuracy=0.64
+
+    In that case, synthetic step numbers are assigned in order of appearance.
     """
     log_path = Path(log_path)
     if not log_path.exists():
         return {}
 
-    summary: Dict[str, float] = {}
+    series: Dict[str, List[Dict[str, float]]] = {}
+    global_step = 0
 
     try:
         with log_path.open("r", encoding="utf-8") as f:
@@ -97,23 +114,70 @@ def parse_metrics_from_log(log_path: Path) -> Dict[str, float]:
                 if not line.startswith("METRIC "):
                     continue
 
-                # Remove "METRIC " prefix
-                metric_part = line[len("METRIC ") :]
-
-                if "=" not in metric_part:
+                metric_part = line[len("METRIC ") :].strip()
+                if not metric_part:
                     continue
 
-                name, value_str = metric_part.split("=", 1)
-                name = name.strip()
-                value_str = value_str.strip()
+                # Case 1: JSON payload
+                if metric_part.startswith("{"):
+                    try:
+                        import json as _json
 
-                try:
-                    value = float(value_str)
-                except ValueError:
-                    continue
+                        payload = _json.loads(metric_part)
+                        if not isinstance(payload, dict):
+                            continue
 
-                summary[name] = value
+                        step_val = payload.get("step")
+                        try:
+                            step = int(step_val)
+                        except (TypeError, ValueError):
+                            global_step += 1
+                            step = global_step
+
+                        for key, value in payload.items():
+                            if key == "step":
+                                continue
+                            try:
+                                val_f = float(value)
+                            except (TypeError, ValueError):
+                                continue
+                            metric_series = series.setdefault(key, [])
+                            metric_series.append({"step": step, "value": val_f})
+
+                        continue
+                    except Exception:
+                        # Fall back to other parsing below
+                        pass
+
+                # Case 2: key=value format
+                if "=" in metric_part:
+                    name, value_str = metric_part.split("=", 1)
+                    name = name.strip()
+                    value_str = value_str.strip()
+                    if not name:
+                        continue
+
+                    try:
+                        val_f = float(value_str)
+                    except ValueError:
+                        continue
+
+                    global_step += 1
+                    metric_series = series.setdefault(name, [])
+                    metric_series.append({"step": global_step, "value": val_f})
     except OSError:
         return {}
 
-    return summary
+    # Build final dict of last values for each metric
+    final: Dict[str, float] = {}
+    for name, values in series.items():
+        if not values:
+            continue
+        final[name] = values[-1]["value"]
+
+    if final:
+        result: Dict[str, Any] = dict(series)
+        result["final"] = final
+        return result
+
+    return {}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from .config import load_config
@@ -31,9 +32,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # list subcommand
-    subparsers.add_parser(
+    list_parser = subparsers.add_parser(
         "list",
         help="List recorded runs",
+    )
+    list_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output runs as JSON instead of a table",
     )
 
     # show subcommand
@@ -45,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
         "run_id",
         type=str,
         help="Run id to inspect",
+    )
+    show_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output run metadata as JSON instead of a table",
     )
 
     # metrics subcommand
@@ -72,12 +83,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         _handle_run_command(Path(args.config_path))
         return 0
+
     if args.command == "list":
-        _handle_list_command()
+        _handle_list_command(json_output=getattr(args, "json", False))
         return 0
+
     if args.command == "show":
-        _handle_show_command(args.run_id)
+        _handle_show_command(args.run_id, json_output=getattr(args, "json", False))
         return 0
+
     if args.command == "metrics":
         return metrics_command(run_id=args.run_id, json_output=args.json)
 
@@ -110,11 +124,17 @@ def _handle_run_command(config_path: Path) -> None:
     log_path = run_dir / "logs.txt"
     parsed_metrics = parse_metrics_from_log(log_path)
 
-    # Build metrics summary
+    # Build metrics summary (scalar values only)
     summary: dict[str, float] = {}
 
-    # Include any parsed metrics from logs
-    summary.update(parsed_metrics)
+    # Use the 'final' metrics dict if present
+    final_metrics = parsed_metrics.get("final") if isinstance(parsed_metrics, dict) else None
+    if isinstance(final_metrics, dict):
+        for key, value in final_metrics.items():
+            try:
+                summary[key] = float(value)
+            except (TypeError, ValueError):
+                continue
 
     # Always include exit code as a metric
     try:
@@ -127,18 +147,24 @@ def _handle_run_command(config_path: Path) -> None:
         write_metrics(run_dir=run_dir, run_id=run_id, summary=summary)
         print(f"[RunPilot] Metrics written to {run_dir / 'metrics.json'}")
 
+
     print(f"[RunPilot] Run completed with exit code {exit_code}")
     print(f"[RunPilot] Metadata written to {run_dir / 'run.json'}")
 
 
-def _handle_list_command() -> None:
+def _handle_list_command(json_output: bool = False) -> None:
     runs = load_all_runs()
+
+    if json_output:
+        # Machine-readable output
+        print(json.dumps(runs, indent=2, sort_keys=True, default=str))
+        return
 
     if not runs:
         print("[RunPilot] No runs found.")
         return
 
-    # Simple table: ID (shortened), STATUS, EXIT, CREATED_AT
+    # Human-readable table: ID (shortened), STATUS, EXIT, CREATED_AT
     header = f"{'ID':<32} {'STATUS':<10} {'EXIT':<5} {'CREATED_AT'}"
     print(header)
     print("-" * len(header))
@@ -152,7 +178,7 @@ def _handle_list_command() -> None:
         print(f"{run_id:<32} {status:<10} {exit_str:<5} {created_at}")
 
 
-def _handle_show_command(run_id: str) -> None:
+def _handle_show_command(run_id: str, json_output: bool = False) -> None:
     try:
         meta = load_run(run_id)
     except FileNotFoundError as exc:
@@ -160,6 +186,10 @@ def _handle_show_command(run_id: str) -> None:
         return
     except ValueError as exc:
         print(f"[RunPilot] Failed to load run metadata: {exc}")
+        return
+
+    if json_output:
+        print(json.dumps(meta, indent=2, sort_keys=True, default=str))
         return
 
     print(f"Run ID      : {meta.get('id')}")
