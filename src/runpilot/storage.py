@@ -123,3 +123,65 @@ def write_run_metadata(
 
     with meta_path.open("w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
+
+
+def load_all_runs() -> list[Dict[str, Any]]:
+    """
+    Load metadata for all runs under the runs directory.
+
+    Returns a list of dicts sorted by created_at descending if present,
+    otherwise sorted by id descending.
+    """
+    runs_dir = get_runs_dir()
+    results: list[Dict[str, Any]] = []
+
+    if not runs_dir.is_dir():
+        return results
+
+    for child in runs_dir.iterdir():
+        if not child.is_dir():
+            continue
+        meta_path = child / "run.json"
+        if not meta_path.is_file():
+            continue
+        try:
+            with meta_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                continue
+        except Exception:
+            continue
+
+        # Ensure id and run_dir are always present
+        data.setdefault("id", child.name)
+        data.setdefault("run_dir", str(child))
+        results.append(data)
+
+    def sort_key(item: Dict[str, Any]) -> str:
+        return str(item.get("created_at") or item.get("id") or "")
+
+    results.sort(key=sort_key, reverse=True)
+    return results
+
+
+def load_run(run_id: str) -> Dict[str, Any]:
+    """
+    Load metadata for a single run by id.
+
+    Raises FileNotFoundError if the run or metadata file does not exist.
+    """
+    run_dir = get_runs_dir() / run_id
+    meta_path = run_dir / "run.json"
+
+    if not meta_path.is_file():
+        raise FileNotFoundError(f"Run '{run_id}' not found")
+
+    with meta_path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if not isinstance(data, dict):
+        raise ValueError(f"Metadata for run '{run_id}' is not a JSON object")
+
+    data.setdefault("id", run_id)
+    data.setdefault("run_dir", str(run_dir))
+    return data

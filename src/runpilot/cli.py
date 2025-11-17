@@ -5,7 +5,12 @@ from pathlib import Path
 
 from .config import load_config
 from .runner import run_local_container
-from .storage import create_run_dir, write_run_metadata
+from .storage import (
+    create_run_dir,
+    write_run_metadata,
+    load_all_runs,
+    load_run,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -27,10 +32,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to the run config YAML file",
     )
 
-    # list subcommand (stub for now)
+    # list subcommand
     subparsers.add_parser(
         "list",
-        help="List recorded runs (placeholder for now)",
+        help="List recorded runs",
+    )
+
+    # show subcommand
+    show_parser = subparsers.add_parser(
+        "show",
+        help="Show details for a specific run",
+    )
+    show_parser.add_argument(
+        "run_id",
+        type=str,
+        help="Run id to inspect",
     )
 
     return parser
@@ -44,6 +60,8 @@ def main() -> None:
         _handle_run_command(Path(args.config_path))
     elif args.command == "list":
         _handle_list_command()
+    elif args.command == "show":
+        _handle_show_command(args.run_id)
     else:
         parser.print_help()
 
@@ -73,9 +91,45 @@ def _handle_run_command(config_path: Path) -> None:
 
 
 def _handle_list_command() -> None:
-    # Proper implementation will read ~/.runpilot/runs and list them.
-    print("[RunPilot] Listing runs is not implemented yet.")
+    runs = load_all_runs()
+
+    if not runs:
+        print("[RunPilot] No runs found.")
+        return
+
+    # Simple table: ID (shortened), STATUS, CREATED_AT, EXIT_CODE
+    header = f"{'ID':<32} {'STATUS':<10} {'EXIT':<5} {'CREATED_AT'}"
+    print(header)
+    print("-" * len(header))
+
+    for r in runs:
+        run_id = str(r.get("id", ""))[:32]
+        status = str(r.get("status", ""))
+        exit_code = r.get("exit_code")
+        created_at = str(r.get("created_at", ""))
+        exit_str = "" if exit_code is None else str(exit_code)
+        print(f"{run_id:<32} {status:<10} {exit_str:<5} {created_at}")
 
 
-if __name__ == "__main__":
-    main()
+def _handle_show_command(run_id: str) -> None:
+    try:
+        meta = load_run(run_id)
+    except FileNotFoundError as exc:
+        print(f"[RunPilot] {exc}")
+        return
+    except ValueError as exc:
+        print(f"[RunPilot] Failed to load run metadata: {exc}")
+        return
+
+    print(f"Run ID      : {meta.get('id')}")
+    print(f"Name        : {meta.get('name')}")
+    print(f"Status      : {meta.get('status')}")
+    print(f"Exit code   : {meta.get('exit_code')}")
+    print(f"Created at  : {meta.get('created_at')}")
+    print(f"Finished at : {meta.get('finished_at')}")
+    print(f"Image       : {meta.get('image')}")
+    print(f"Entrypoint  : {meta.get('entrypoint')}")
+    print(f"Run dir     : {meta.get('run_dir')}")
+
+    log_path = Path(str(meta.get("run_dir", ""))) / "logs.txt"
+    print(f"Logs path   : {log_path}")
