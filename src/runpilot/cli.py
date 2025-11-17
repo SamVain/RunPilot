@@ -14,6 +14,7 @@ from .storage import (
 )
 from .metrics import parse_metrics_from_log, write_metrics
 from .cli_metrics import metrics_command
+from .archive import export_run, import_run, RunNotFoundError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -73,6 +74,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print raw metrics.json as JSON",
     )
 
+    # export subcommand
+    export_parser = subparsers.add_parser(
+        "export",
+        help="Export a run to a tar.gz archive",
+    )
+    export_parser.add_argument(
+        "run_id",
+        help="Run identifier to export",
+    )
+    export_parser.add_argument(
+        "--output",
+        "-o",
+        help="Output archive path (default: <run-id>.tar.gz in current directory)",
+    )
+
+    # import subcommand
+    import_parser = subparsers.add_parser(
+        "import",
+        help="Import a run from a tar.gz archive",
+    )
+    import_parser.add_argument(
+        "archive_path",
+        help="Path to an exported run archive (tar.gz)",
+    )
+    import_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing run directory if it already exists",
+    )
+
     return parser
 
 
@@ -95,7 +126,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "metrics":
         return metrics_command(run_id=args.run_id, json_output=args.json)
 
-    # Should not normally reach here
+    if args.command == "export":
+        return _handle_export_command(args.run_id, args.output)
+
+    if args.command == "import":
+        return _handle_import_command(Path(args.archive_path), overwrite=args.force)
+
     parser.error(f"Unknown command {args.command!r}")
     return 1
 
@@ -127,7 +163,6 @@ def _handle_run_command(config_path: Path) -> None:
     # Build metrics summary (scalar values only)
     summary: dict[str, float] = {}
 
-    # Use the 'final' metrics dict if present
     final_metrics = parsed_metrics.get("final") if isinstance(parsed_metrics, dict) else None
     if isinstance(final_metrics, dict):
         for key, value in final_metrics.items():
@@ -147,7 +182,6 @@ def _handle_run_command(config_path: Path) -> None:
         write_metrics(run_dir=run_dir, run_id=run_id, summary=summary)
         print(f"[RunPilot] Metrics written to {run_dir / 'metrics.json'}")
 
-
     print(f"[RunPilot] Run completed with exit code {exit_code}")
     print(f"[RunPilot] Metadata written to {run_dir / 'run.json'}")
 
@@ -156,7 +190,6 @@ def _handle_list_command(json_output: bool = False) -> None:
     runs = load_all_runs()
 
     if json_output:
-        # Machine-readable output
         print(json.dumps(runs, indent=2, sort_keys=True, default=str))
         return
 
@@ -164,7 +197,6 @@ def _handle_list_command(json_output: bool = False) -> None:
         print("[RunPilot] No runs found.")
         return
 
-    # Human-readable table: ID (shortened), STATUS, EXIT, CREATED_AT
     header = f"{'ID':<32} {'STATUS':<10} {'EXIT':<5} {'CREATED_AT'}"
     print(header)
     print("-" * len(header))
@@ -204,3 +236,35 @@ def _handle_show_command(run_id: str, json_output: bool = False) -> None:
 
     log_path = Path(str(meta.get("run_dir", ""))) / "logs.txt"
     print(f"Logs path   : {log_path}")
+
+
+def _handle_export_command(run_id: str, output_arg: str | None) -> int:
+    from pathlib import Path as _Path
+
+    output_path = _Path(output_arg) if output_arg else None
+
+    try:
+        archive_path = export_run(run_id, output_path=output_path)
+    except RunNotFoundError as exc:
+        print(f"[RunPilot] {exc}")
+        return 1
+
+    print(f"[RunPilot] Exported run {run_id} to {archive_path}")
+    return 0
+
+
+def _handle_import_command(archive_path: Path, overwrite: bool = False) -> int:
+    try:
+        run_id = import_run(archive_path, overwrite=overwrite)
+    except FileNotFoundError as exc:
+        print(f"[RunPilot] {exc}")
+        return 1
+    except FileExistsError as exc:
+        print(f"[RunPilot] {exc}")
+        return 1
+    except ValueError as exc:
+        print(f"[RunPilot] Failed to import archive: {exc}")
+        return 1
+
+    print(f"[RunPilot] Imported run {run_id} from {archive_path}")
+    return 0
