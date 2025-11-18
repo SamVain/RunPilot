@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 from .cloud_config import CloudConfig, save_cloud_config
 
 import httpx
@@ -91,3 +91,37 @@ def upload_run_metrics(
         timeout=10.0,
     )
     resp.raise_for_status()
+
+def list_remote_runs(cfg: CloudConfig) -> List[Dict[str, Any]]:
+    """
+    List runs from RunPilot Cloud for the current token and organisation.
+    """
+    base = cfg.api_base_url.rstrip("/")
+    url = f"{base}/v1/runs"
+
+    resp = httpx.get(
+        url,
+        headers=_auth_headers(cfg),
+        timeout=10.0,
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, list):
+        raise RuntimeError("Unexpected response from /v1/runs")
+    return body
+
+
+def get_identity(cfg: CloudConfig) -> Dict[str, Any]:
+    """
+    Return identity information from /v1/auth/me.
+    """
+    base = cfg.api_base_url.rstrip("/")
+    url = f"{base}/v1/auth/me"
+
+    resp = httpx.get(
+        url,
+        headers=_auth_headers(cfg),
+        timeout=10.0,
+    )
+    resp.raise_for_status()
+    return resp.json()

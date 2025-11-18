@@ -4,7 +4,13 @@ import argparse
 import json
 import getpass
 
-from .cloud_client import login_via_api, create_remote_run, upload_run_metrics
+from .cloud_client import (
+    login_via_api,
+    create_remote_run,
+    upload_run_metrics,
+    list_remote_runs,
+    get_identity,
+)
 from pathlib import Path
 from .config import load_config, resolve_config_path
 from .runner import run_local_container
@@ -140,6 +146,24 @@ def build_parser() -> argparse.ArgumentParser:
         "run_id",
         help="Run identifier to sync",
     )
+    
+    # whoami subcommand
+    whoami_parser = subparsers.add_parser(
+        "whoami",
+        help="Show current RunPilot Cloud identity",
+    )
+
+    # list-remote subcommand
+    list_remote_parser = subparsers.add_parser(
+        "list-remote",
+        help="List runs stored in RunPilot Cloud",
+    )
+    list_remote_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output remote runs as JSON instead of a table",
+    )
+
 
     return parser
 
@@ -178,6 +202,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "sync":
         return _handle_sync_command(args.run_id)
+
+    if args.command == "whoami":
+        return _handle_whoami_command()
+
+    if args.command == "list-remote":
+        return _handle_list_remote_command(
+            json_output=getattr(args, "json", False)
+        )
 
     parser.error(f"Unknown command {args.command!r}")
     return 1
@@ -475,4 +507,62 @@ def _handle_sync_command(run_id: str) -> int:
 
     print("[RunPilot] Sync complete (metadata + metrics).")
     # Logs and artifacts not yet uploaded
+    return 0
+
+def _handle_whoami_command() -> int:
+    cfg = load_cloud_config()
+    if cfg is None:
+        print("[RunPilot] No cloud configuration found.")
+        print("[RunPilot] Run `runpilot login` first to configure RunPilot Cloud.")
+        return 1
+
+    try:
+        info = get_identity(cfg)
+    except Exception as exc:
+        print(f"[RunPilot] Failed to query identity from Cloud: {exc}")
+        return 1
+
+    user = info.get("user", {}) or {}
+    org = info.get("org", {}) or {}
+
+    print(f"[RunPilot] API base URL : {cfg.api_base_url}")
+    print(f"[RunPilot] User        : {user.get('email')} (id={user.get('id')})")
+    print(f"[RunPilot] Org         : {org.get('name')} (id={org.get('id')})")
+    print(f"[RunPilot] Plan        : {org.get('plan_tier')}")
+    return 0
+
+
+def _handle_list_remote_command(json_output: bool = False) -> int:
+    cfg = load_cloud_config()
+    if cfg is None:
+        print("[RunPilot] No cloud configuration found.")
+        print("[RunPilot] Run `runpilot login` first to configure RunPilot Cloud.")
+        return 1
+
+    try:
+        runs = list_remote_runs(cfg)
+    except Exception as exc:
+        print(f"[RunPilot] Failed to list remote runs: {exc}")
+        return 1
+
+    if json_output:
+        print(json.dumps(runs, indent=2, sort_keys=True, default=str))
+        return 0
+
+    if not runs:
+        print("[RunPilot] No remote runs found.")
+        return 0
+
+    header = f"{'CLOUD_ID':<16} {'RUN_ID':<32} {'STATUS':<10} {'PROJECT':<16} {'STARTED'}"
+    print(header)
+    print("-" * len(header))
+
+    for r in runs:
+        cloud_id = str(r.get("cloud_run_id", ""))[:16]
+        run_id = str(r.get("run_id", ""))[:32]
+        status = str(r.get("status", ""))
+        project = str(r.get("project", ""))[:16]
+        started_at = str(r.get("started_at", ""))
+        print(f"{cloud_id:<16} {run_id:<32} {status:<10} {project:<16} {started_at}")
+
     return 0
