@@ -13,7 +13,10 @@ authors = [
   { name = "Sam Vain" }
 ]
 dependencies = [
-  "PyYAML>=6.0",
+  "click>=8.1.0,<9.0.0",
+  "rich>=13.0.0,<14.0.0",
+  "httpx>=0.27,<1.0",
+  "pyyaml>=6.0,<7.0",
 ]
 
 [project.scripts]

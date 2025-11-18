@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+import getpass
 
+from .cloud_client import login_via_api, create_remote_run, upload_run_metrics
+from pathlib import Path
 from .config import load_config, resolve_config_path
 from .runner import run_local_container
 from .storage import (
@@ -111,14 +113,18 @@ def build_parser() -> argparse.ArgumentParser:
         "login",
         help="Configure RunPilot Cloud credentials",
     )
-    
+
     login_parser.add_argument(
         "--api-base-url",
         help="Base URL for the RunPilot Cloud API (for example: https://api.runpilot.dev)",
     )
     login_parser.add_argument(
+        "--email",
+        help="Account email for RunPilot Cloud (used with password to obtain a token)",
+    )
+    login_parser.add_argument(
         "--token",
-        help="API token for RunPilot Cloud",
+        help="API token for RunPilot Cloud (advanced: overrides email/password flow)",
     )
     login_parser.add_argument(
         "--project",
@@ -320,45 +326,59 @@ def _handle_login_command(
     """
     Configure RunPilot Cloud credentials.
 
-    If arguments are missing, prompt interactively.
+    For now this always uses username/password against the Cloud API
+    to obtain an API token, then writes ~/.runpilot/cloud.yaml.
     """
-    # Interactive prompts as a fallback for local use
-    if not api_base_url:
-        api_base_url = input("RunPilot Cloud API base URL (for example https://api.runpilot.dev): ").strip()
-    if not token:
-        token = input("RunPilot Cloud API token: ").strip()
-    if not default_project:
-        default_project = input("Default project name (optional, press enter to skip): ").strip() or None
+    from . import cloud_client
 
-    if not api_base_url or not token:
-        print("[RunPilot] Cloud login aborted, api_base_url and token are required.")
+    # Base URL prompt with default
+    if not api_base_url:
+        api_base_url = input(
+            "RunPilot Cloud API base URL (default: http://127.0.0.1:8000): "
+        ).strip()
+        if not api_base_url:
+            api_base_url = "http://127.0.0.1:8000"
+
+    # Interactive email/password prompt
+    email = input("RunPilot Cloud account email: ").strip()
+    password = input("RunPilot Cloud password: ").strip()
+
+    try:
+        cfg = cloud_client.login_via_api(
+            api_base_url=api_base_url,
+            email=email,
+            password=password,
+            default_project=default_project,
+        )
+    except Exception as exc:
+        print(f"[RunPilot] Cloud login failed: {exc}")
         return 1
 
-    cfg = CloudConfig(
-        api_base_url=api_base_url,
-        token=token,
-        default_project=default_project,
-    )
-
-    path = save_cloud_config(cfg)
-    print(f"[RunPilot] Cloud configuration written to {path}")
+    print(f"[RunPilot] Logged in as {email}")
+    print(f"[RunPilot] Cloud configuration written to {cfg.config_path}")
     return 0
 
 
 def _handle_sync_command(run_id: str) -> int:
     """
-    Skeleton implementation for `runpilot sync <run-id>`.
+    Sync a local run to RunPilot Cloud.
 
-    Currently:
+    Behaviour:
       * Validates run directory exists.
-      * Checks that cloud configuration exists.
-      * Prints a summary of what would be synced.
-      * Does not perform any network calls yet.
+      * Validates cloud configuration exists and has a token.
+      * Reads run.json and metrics.json if present.
+      * Creates a run in the Cloud and uploads metrics.
+      * Logs what was done.
     """
     cfg = load_cloud_config()
     if cfg is None:
         print("[RunPilot] No cloud configuration found.")
         print("[RunPilot] Run `runpilot login` first to configure RunPilot Cloud.")
+        return 1
+
+    if not cfg.token:
+        print("[RunPilot] Cloud configuration found but no token is set.")
+        print("[RunPilot] Run `runpilot login` again to obtain a token.")
         return 1
 
     run_dir = get_run_dir(run_id)
@@ -376,7 +396,7 @@ def _handle_sync_command(run_id: str) -> int:
     if cfg.default_project:
         print(f"[RunPilot] Project: {cfg.default_project}")
 
-    print(f"[RunPilot] Files:")
+    print("[RunPilot] Files:")
     print(f"  - run.json      : {'present' if run_json.exists() else 'missing'}")
     print(f"  - metrics.json  : {'present' if metrics_json.exists() else 'missing'}")
     print(f"  - logs.txt      : {'present' if logs_txt.exists() else 'missing'}")
@@ -389,6 +409,70 @@ def _handle_sync_command(run_id: str) -> int:
     else:
         print("  - outputs/      : none")
 
-    print("[RunPilot] Sync is currently a dry run (no network calls made).")
-    print("[RunPilot] In a future version this will upload metadata, metrics, logs and artifacts.")
+    if not run_json.exists():
+        print("[RunPilot] Cannot sync: run.json is missing.")
+        return 1
+
+    # Load metadata
+    try:
+        meta = json.loads(run_json.read_text())
+    except Exception as exc:
+        print(f"[RunPilot] Failed to read run.json: {exc}")
+        return 1
+
+    # Build Cloud run payload
+    cloud_run_payload: dict[str, Any] = {
+        "run_id": meta.get("id", run_id),
+        "project": cfg.default_project,
+        "status": meta.get("status"),
+        "started_at": meta.get("created_at"),
+        "ended_at": meta.get("finished_at"),
+        "params": meta.get("params") or {},
+        "tags": meta.get("tags") or [],
+        "config": {
+            "name": meta.get("name"),
+            "image": meta.get("image"),
+            "entrypoint": meta.get("entrypoint"),
+        },
+    }
+
+    try:
+        cloud_run_id = create_remote_run(cfg, cloud_run_payload)
+    except Exception as exc:
+        print(f"[RunPilot] Failed to create run in Cloud: {exc}")
+        return 1
+
+    print(f"[RunPilot] Created remote run with id {cloud_run_id}")
+
+    # Metrics (optional)
+    if metrics_json.exists():
+        try:
+            metrics_data = json.loads(metrics_json.read_text())
+        except Exception as exc:
+            print(f"[RunPilot] Failed to read metrics.json: {exc}")
+            metrics_data = {}
+
+        # Be tolerant of schemas: either {summary, time_series} or plain summary
+        if isinstance(metrics_data, dict):
+            summary = metrics_data.get("summary", metrics_data)
+            time_series = metrics_data.get("time_series", [])
+        else:
+            summary = {}
+            time_series = []
+
+        metrics_payload: dict[str, Any] = {
+            "summary": summary or {},
+            "time_series": time_series or [],
+        }
+
+        try:
+            upload_run_metrics(cfg, cloud_run_id, metrics_payload)
+            print("[RunPilot] Uploaded metrics to Cloud.")
+        except Exception as exc:
+            print(f"[RunPilot] Failed to upload metrics: {exc}")
+    else:
+        print("[RunPilot] No metrics.json found; skipping metrics upload.")
+
+    print("[RunPilot] Sync complete (metadata + metrics).")
+    # Logs and artifacts not yet uploaded
     return 0

@@ -1,15 +1,15 @@
 # RunPilot
 
-RunPilot is a lightweight orchestration tool for **reproducible AI and ML training runs**.
+RunPilot is a lightweight orchestration and tracking tool for fully reproducible AI and ML training runs.
 
-You define a training run in a simple config file. RunPilot takes care of:
+Define a training run with a simple config file — RunPilot automatically captures the full execution record:
 
-- Creating a unique run directory
-- Capturing metadata and parameters
-- Storing logs
-- Tracking run history locally
+- Unique run directory and immutable identifiers
+- Configuration, parameters, and environment metadata
+- Logs, metrics, and optional artifacts
+- Local run history with export and sync options
 
-The long term vision is an **open core** CLI with a hosted **RunPilot Cloud** for teams, remote compute and enterprise features.
+RunPilot's long-term vision is open core: a free local CLI for reproducible research, with RunPilot Cloud providing shared run history, audit-ready records, collaboration, retention, compliance, and enterprise integration.
 
 ### Status:
 **Version**: `v0.1.0` \

@@ -36,3 +36,24 @@ runpilot.yaml
 hello-run.tar.gz
 runpilot.yaml
 hello-run.tar.gz
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual env
+.venv/
+
+# RunPilot state
+runpilot_cloud.db
+runpilot_local.db
+.runpilot/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# OS crap
+.DS_Store
