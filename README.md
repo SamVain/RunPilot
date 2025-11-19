@@ -326,4 +326,5 @@ If you want to contribute:
 Early feedback, issues and suggestions are very welcome. The goal is to grow RunPilot into a reliable, boring core tool for ML practitioners that just want their experiments tracked properly.
 
 ## License
-Apache 2.0 (pending final confirmation)
+Apache 2.0
+
