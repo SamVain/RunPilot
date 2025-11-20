@@ -1,72 +1,115 @@
 from __future__ import annotations
-
 import subprocess
+import shlex
+import os
 from pathlib import Path
-
+from rich.console import Console
 from .config import RunConfig
 
+console = Console()
 
-def run_local_container(cfg: RunConfig, run_dir: Path) -> int:
+def run_local_container(cfg: RunConfig, run_dir: Path, working_dir: Path | None = None) -> int:
     """
-    Local container runner using Docker with a mounted run directory.
-
-    Behaviour:
-      * If Docker is available, run the configured image and entrypoint.
-      * Mount run_dir into the container at /run.
-      * Capture stdout and stderr into logs.txt.
-      * Return the container exit code.
-      * If Docker is not available, write a clear message and return 1.
-
-    In future we can add a separate non Docker runner and a flag to select it.
+    Runs the job. 
+    - run_dir: Where logs/metrics go.
+    - working_dir: Where the code execution happens (Defaults to os.getcwd() if None).
     """
-    run_dir = Path(run_dir)
+    run_dir = Path(run_dir).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
-    log_path = run_dir / "logs.txt"
+    
+    # Default execution location: CWD (Local run) or run_dir (Remote Agent run)
+    # CRITICAL: Docker requires absolute paths for volume mounts.
+    if working_dir:
+        exec_dir = Path(working_dir).resolve()
+    else:
+        exec_dir = Path(os.getcwd()).resolve()
 
-    # Build Docker command:
-    # docker run --rm -v <run_dir>:/run -w /run <image> sh -lc "<entrypoint>"
-    cmd = [
-        "docker",
-        "run",
-        "--rm",
-        "-v",
-        f"{run_dir}:/run",
-        "-w",
-        "/run",
-        cfg.image,
-        "sh",
-        "-lc",
-        cfg.entrypoint,
-    ]
+    # 1. Check Docker
+    docker_avail = _check_docker()
+    
+    if cfg.image and docker_avail:
+        return _run_in_docker(cfg, run_dir, exec_dir)
+    else:
+        if cfg.image:
+            console.print(f"[yellow]⚠ Docker not found. Falling back to local.[/yellow]")
+        return _run_locally(cfg, run_dir, exec_dir)
 
+def _check_docker() -> bool:
     try:
-        proc = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        output = proc.stdout or ""
-        exit_code = proc.returncode
-    except FileNotFoundError:
-        # Docker binary not found
-        output = (
-            "[RunPilot] Docker is not installed or not on PATH.\n"
-            "[RunPilot] Cannot execute container based run.\n"
-            "[RunPilot] To fix this, either install Docker or configure a non Docker runner once available.\n"
-            f"[RunPilot] Requested image: {cfg.image}\n"
-            f"[RunPilot] Entrypoint: {cfg.entrypoint}\n"
-        )
-        exit_code = 1
+        subprocess.run(["docker", "--version"], capture_output=True, check=True)
+        return True
+    except Exception:
+        return False
 
-    # Write logs regardless of success or failure
+def _run_in_docker(cfg: RunConfig, run_dir: Path, exec_dir: Path) -> int:
+    console.print(f"[blue]🐳 Starting Docker ({cfg.image})...[/blue]")
+    log_path = run_dir / "logs.txt"
+    
+    try:
+        cmd_args = shlex.split(cfg.entrypoint)
+    except:
+        cmd_args = cfg.entrypoint.split()
+
+    # Docker command construction
+    docker_cmd = [
+        "docker", "run", "--rm",
+        "-v", f"{str(exec_dir)}:/app",
+        "-w", "/app"
+    ]
+    
+    # --- INJECT SECRETS ---
+    # We pass environment variables to the container here
+    if cfg.env_vars:
+        for key, val in cfg.env_vars.items():
+            docker_cmd.extend(["-e", f"{key}={val}"])
+    # ----------------------
+
+    docker_cmd.append(cfg.image)
+    docker_cmd.extend(cmd_args)
+
     with log_path.open("w", encoding="utf-8") as f:
-        f.write(output)
+        try:
+            # We don't use check=True here because we want to capture the exit code manually
+            proc = subprocess.run(docker_cmd, stdout=f, stderr=subprocess.STDOUT, text=True)
+            
+            if proc.returncode != 0:
+                # If it fails, print the last few lines of the log to the console for debugging
+                console.print(f"[red]Docker exited with code {proc.returncode}. Check logs.[/red]")
+            
+            return proc.returncode
+        except Exception as e:
+            console.print(f"[red]Docker execution error:[/red] {e}")
+            f.write(f"\nDocker execution error: {e}\n")
+            return 1
 
-    print(f"[RunPilot] Logs written to {log_path}")
+def _run_locally(cfg: RunConfig, run_dir: Path, exec_dir: Path) -> int:
+    console.print("[blue]⚡ Starting Local Process...[/blue]")
+    log_path = run_dir / "logs.txt"
+    
+    try:
+        cmd_args = shlex.split(cfg.entrypoint)
+    except:
+        cmd_args = cfg.entrypoint.split()
 
-    if exit_code != 0:
-        print(f"[RunPilot] Container exited with code {exit_code}")
-        print("[RunPilot] Check logs.txt in the run directory for details.")
+    # Prepare environment variables for local process
+    env = os.environ.copy()
+    if cfg.env_vars:
+        env.update(cfg.env_vars)
 
-    return exit_code
+    with log_path.open("w", encoding="utf-8") as f:
+        try:
+            # IMPORTANT: Run inside the execution directory
+            proc = subprocess.run(
+                cmd_args, 
+                stdout=f, 
+                stderr=subprocess.STDOUT, 
+                text=True, 
+                check=False,
+                cwd=str(exec_dir),
+                env=env  # <--- Inject secrets
+            )
+            return proc.returncode
+        except Exception as e:
+            console.print(f"[red]Local error:[/red] {e}")
+            f.write(f"\nLocal error: {e}\n")
+            return 1

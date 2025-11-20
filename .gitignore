@@ -1,59 +1,46 @@
-# Python cache
+# --- Python Standard ---
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.whl
 
-# Virtual environments
+# --- Virtual Environments ---
 .venv/
 venv/
 env/
 
-# Build artifacts
+# --- Build Artifacts ---
 build/
 dist/
 *.egg-info/
 *.egg
 
-# IDE / Editor stuff
-.vscode/
-.idea/
-
-# OS files
+# --- OS Junk ---
 .DS_Store
 Thumbs.db
 
-# Python packaging
-*.whl
+# --- IDEs ---
+.vscode/
+.idea/
 
-# Project-specific ignores
-example.yaml
-# Ignore
-hello-run.tar.gz
-runpilot.yaml
-
-# Ignore
-hello-run.tar.gz
-runpilot.yaml
-hello-run.tar.gz
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-
-# Virtual env
-.venv/
-
-# RunPilot state
-runpilot_cloud.db
-runpilot_local.db
+# --- RunPilot Local State (Ignored) ---
 .runpilot/
+runpilot_local.db
 
-# Packaging
-build/
-dist/
-*.egg-info/
+# --- Secrets (CRITICAL) ---
+.env
+*.env
 
-# OS crap
-.DS_Store
+# --- Temporary Artifacts & Logs ---
+*.tar.gz
+*.log
+logs.txt
+test.txt
+
+# --- Local Test Configs ---
+example.yaml
+remote_test.yaml
+secret_test.yaml
+runpilot.yaml
+train.py

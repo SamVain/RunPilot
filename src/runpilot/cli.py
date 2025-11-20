@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import click
 import argparse
 import json
 import getpass
+import os  # <--- Added
 
 from .cloud_client import (
     login_via_api,
@@ -10,6 +12,8 @@ from .cloud_client import (
     upload_run_metrics,
     list_remote_runs,
     get_identity,
+    list_projects,
+    submit_job # <--- Added explicit import
 )
 from pathlib import Path
 from .config import load_config, resolve_config_path
@@ -25,7 +29,31 @@ from .cli_metrics import metrics_command
 from .archive import export_run, import_run, RunNotFoundError
 from .cloud_config import CloudConfig, load_cloud_config, save_cloud_config
 from .paths import get_run_dir
+from .project import (
+    LocalProjectBinding,
+    load_local_project_binding,
+    save_local_project_binding,
+)
 
+# --- Helpers ---
+
+def parse_env_file(path: str) -> dict[str, str]:
+    """Simple parser for KEY=VAL .env files"""
+    env_vars = {}
+    if not os.path.exists(path):
+        return env_vars
+        
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, val = line.split("=", 1)
+                # Remove surrounding quotes if present
+                val = val.strip('"').strip("'")
+                env_vars[key.strip()] = val
+    return env_vars
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="runpilot")
@@ -164,6 +192,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output remote runs as JSON instead of a table",
     )
 
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Bind this folder to a RunPilot Cloud project",
+    )
+
+    submit_parser = subparsers.add_parser(
+        "submit",
+        help="Submit a job to RunPilot Cloud (Remote Execution)",
+    )
+    submit_parser.add_argument(
+        "config_path",
+        type=str,
+        help="Path to the run config YAML file",
+    )
+    # --- NEW: env-file argument ---
+    submit_parser.add_argument(
+        "--env-file",
+        type=str,
+        help="Path to a .env file containing secrets",
+    )
+    # ------------------------------
+    
+    subparsers.add_parser(
+        "agent",
+        help="Start a worker agent to execute remote jobs",
+    )
 
     return parser
 
@@ -210,6 +264,16 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_list_remote_command(
             json_output=getattr(args, "json", False)
         )
+        
+    if args.command == "init":
+        return _handle_init_command()
+
+    if args.command == "submit":
+        # --- UPDATED: Pass env_file ---
+        return _handle_submit_command(args.config_path, getattr(args, "env_file", None))
+
+    if args.command == "agent":
+        return _handle_agent_command()
 
     parser.error(f"Unknown command {args.command!r}")
     return 1
@@ -357,11 +421,9 @@ def _handle_login_command(
 ) -> int:
     """
     Configure RunPilot Cloud credentials.
-
-    For now this always uses username/password against the Cloud API
-    to obtain an API token, then writes ~/.runpilot/cloud.yaml.
     """
     from . import cloud_client
+    from pathlib import Path
 
     # Base URL prompt with default
     if not api_base_url:
@@ -387,20 +449,15 @@ def _handle_login_command(
         return 1
 
     print(f"[RunPilot] Logged in as {email}")
-    print(f"[RunPilot] Cloud configuration written to {cfg.config_path}")
+    # Fixed: Don't guess the path from the object, just state standard location
+    config_path = Path.home() / ".runpilot" / "cloud.yaml"
+    print(f"[RunPilot] Cloud configuration written to {config_path}")
     return 0
 
 
 def _handle_sync_command(run_id: str) -> int:
     """
     Sync a local run to RunPilot Cloud.
-
-    Behaviour:
-      * Validates run directory exists.
-      * Validates cloud configuration exists and has a token.
-      * Reads run.json and metrics.json if present.
-      * Creates a run in the Cloud and uploads metrics.
-      * Logs what was done.
     """
     cfg = load_cloud_config()
     if cfg is None:
@@ -452,10 +509,15 @@ def _handle_sync_command(run_id: str) -> int:
         print(f"[RunPilot] Failed to read run.json: {exc}")
         return 1
 
-    # Build Cloud run payload
+    binding = load_local_project_binding()
+    if binding is None:
+        print("[RunPilot] No local project binding found.")
+        print("[RunPilot] Run `runpilot init` in this folder to select a Cloud project.")
+        return 1
+
     cloud_run_payload: dict[str, Any] = {
         "run_id": meta.get("id", run_id),
-        "project": cfg.default_project,
+        "project_id": binding.project_id,
         "status": meta.get("status"),
         "started_at": meta.get("created_at"),
         "ended_at": meta.get("finished_at"),
@@ -526,9 +588,9 @@ def _handle_whoami_command() -> int:
     org = info.get("org", {}) or {}
 
     print(f"[RunPilot] API base URL : {cfg.api_base_url}")
-    print(f"[RunPilot] User        : {user.get('email')} (id={user.get('id')})")
-    print(f"[RunPilot] Org         : {org.get('name')} (id={org.get('id')})")
-    print(f"[RunPilot] Plan        : {org.get('plan_tier')}")
+    print(f"[RunPilot] User         : {user.get('email')} (id={user.get('id')})")
+    print(f"[RunPilot] Org          : {org.get('name')} (id={org.get('id')})")
+    print(f"[RunPilot] Plan         : {org.get('plan_tier')}")
     return 0
 
 
@@ -566,3 +628,105 @@ def _handle_list_remote_command(json_output: bool = False) -> int:
         print(f"{cloud_id:<16} {run_id:<32} {status:<10} {project:<16} {started_at}")
 
     return 0
+
+def _handle_init_command() -> int:
+    """
+    Interactively bind the current working directory to a Cloud project.
+    """
+    cfg = load_cloud_config()
+    if cfg is None or not cfg.token:
+        print("[RunPilot] No cloud configuration found.")
+        print("[RunPilot] Run `runpilot login` first.")
+        return 1
+
+    try:
+        projects = list_projects(cfg)
+    except Exception as exc:
+        print(f"[RunPilot] Failed to fetch projects from Cloud: {exc}")
+        return 1
+
+    if not projects:
+        print("[RunPilot] No projects found in Cloud.")
+        print("[RunPilot] Create one in the UI or via API, then re-run `runpilot init`.")
+        return 1
+
+    print("[RunPilot] Available projects:")
+    for idx, p in enumerate(projects, start=1):
+        pid = p.get("id")
+        name = p.get("name") or ""
+        key = p.get("key") or ""
+        print(f"  {idx}. [{pid}] {name} ({key})")
+
+    choice_raw = input("Select project by number: ").strip()
+    if not choice_raw.isdigit():
+        print("[RunPilot] Invalid choice.")
+        return 1
+
+    idx = int(choice_raw)
+    if idx < 1 or idx > len(projects):
+        print("[RunPilot] Choice out of range.")
+        return 1
+
+    project = projects[idx - 1]
+    pid = int(project["id"])
+    name = str(project.get("name") or "")
+
+    binding = LocalProjectBinding(
+        project_id=pid,
+        project_name=name,
+        api_base_url=cfg.api_base_url,
+    )
+    path = save_local_project_binding(binding)
+    print(f"[RunPilot] Bound this folder to project {name!r} (id={pid})")
+    print(f"[RunPilot] Config written to {path}")
+    return 0
+
+def _handle_submit_command(config_ref: str, env_file: str | None) -> int:
+    from . import cloud_client
+    from .config import load_config, resolve_config_path
+    from .project import load_local_project_binding
+    from .cloud_config import load_cloud_config
+
+    # 1. Load Context
+    cfg_cloud = load_cloud_config()
+    if not cfg_cloud or not cfg_cloud.token:
+        print("[RunPilot] Not logged in. Run `runpilot login`.")
+        return 1
+
+    binding = load_local_project_binding()
+    if not binding:
+        print("[RunPilot] No project linked. Run `runpilot init`.")
+        return 1
+    
+    # 2. Load Config
+    config_path = resolve_config_path(config_ref)
+    run_cfg = load_config(config_path)
+
+    # 3. Parse Secrets
+    env_vars = {}
+    if env_file:
+        print(f"[RunPilot] 🔒 Loaded secrets from {env_file}")
+        env_vars = parse_env_file(env_file)
+
+    # 4. Submit
+    try:
+        import os
+        cloud_client.submit_job(
+            cfg_cloud,
+            binding.project_id,
+            run_config=vars(run_cfg),
+            source_dir=os.getcwd(),
+            env_vars=env_vars
+        )
+        return 0
+    except Exception as e:
+        print(f"[RunPilot] Submission failed: {e}")
+        return 1
+    
+def _handle_agent_command() -> int:
+    from .agent import start_agent
+    try:
+        start_agent()
+        return 0
+    except KeyboardInterrupt:
+        return 0

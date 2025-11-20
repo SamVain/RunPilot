@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -14,6 +14,8 @@ class RunConfig:
     name: str
     image: str
     entrypoint: str
+    # --- NEW FIELD ---
+    env_vars: Dict[str, str] = field(default_factory=dict)
 
 
 def load_config(path: str | Path) -> RunConfig:
@@ -42,6 +44,7 @@ def load_config(path: str | Path) -> RunConfig:
         name=str(data["name"]),
         image=str(data["image"]),
         entrypoint=str(data["entrypoint"]),
+        # Note: We don't load env_vars from YAML, they come from CLI/API
     )
 
 def resolve_config_path(ref: str, cwd: Optional[Path] = None) -> Path:
