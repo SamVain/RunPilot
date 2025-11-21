@@ -14,8 +14,10 @@ class RunConfig:
     name: str
     image: str
     entrypoint: str
-    # --- NEW FIELD ---
     env_vars: Dict[str, str] = field(default_factory=dict)
+    # --- NEW FIELD ---
+    use_gpu: bool = False
+    # -----------------
 
 
 def load_config(path: str | Path) -> RunConfig:
@@ -44,19 +46,14 @@ def load_config(path: str | Path) -> RunConfig:
         name=str(data["name"]),
         image=str(data["image"]),
         entrypoint=str(data["entrypoint"]),
-        # Note: We don't load env_vars from YAML, they come from CLI/API
+        # --- READ GPU FLAG ---
+        use_gpu=bool(data.get("gpu", False))
+        # ---------------------
     )
 
 def resolve_config_path(ref: str, cwd: Optional[Path] = None) -> Path:
     """
     Resolve a config reference to a concrete file path.
-
-    Resolution order:
-      1. If `ref` is an existing file path (relative or absolute), use it.
-      2. If `runpilot.yaml` exists in the current working directory (or `cwd`),
-         treat `ref` as a named run under `runs[ref].config`.
-
-    Raises FileNotFoundError if neither resolution path succeeds.
     """
     if cwd is None:
         cwd = Path.cwd()
@@ -73,7 +70,7 @@ def resolve_config_path(ref: str, cwd: Optional[Path] = None) -> Path:
     # 2. project-level config: runpilot.yaml
     project_config = cwd / "runpilot.yaml"
     if project_config.exists():
-        import yaml  # PyYAML is already a dependency
+        import yaml
 
         data = yaml.safe_load(project_config.read_text(encoding="utf-8")) or {}
         runs: Dict[str, Any] = data.get("runs") or {}

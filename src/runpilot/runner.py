@@ -11,14 +11,10 @@ console = Console()
 def run_local_container(cfg: RunConfig, run_dir: Path, working_dir: Path | None = None) -> int:
     """
     Runs the job. 
-    - run_dir: Where logs/metrics go.
-    - working_dir: Where the code execution happens (Defaults to os.getcwd() if None).
     """
     run_dir = Path(run_dir).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
     
-    # Default execution location: CWD (Local run) or run_dir (Remote Agent run)
-    # CRITICAL: Docker requires absolute paths for volume mounts.
     if working_dir:
         exec_dir = Path(working_dir).resolve()
     else:
@@ -57,23 +53,25 @@ def _run_in_docker(cfg: RunConfig, run_dir: Path, exec_dir: Path) -> int:
         "-w", "/app"
     ]
     
-    # --- INJECT SECRETS ---
-    # We pass environment variables to the container here
+    # --- GPU SUPPORT ---
+    if cfg.use_gpu:
+        console.print("[blue]⚡ Requesting NVIDIA GPU access...[/blue]")
+        docker_cmd.extend(["--gpus", "all"])
+    # -------------------
+    
+    # Inject Secrets
     if cfg.env_vars:
         for key, val in cfg.env_vars.items():
             docker_cmd.extend(["-e", f"{key}={val}"])
-    # ----------------------
 
     docker_cmd.append(cfg.image)
     docker_cmd.extend(cmd_args)
 
     with log_path.open("w", encoding="utf-8") as f:
         try:
-            # We don't use check=True here because we want to capture the exit code manually
             proc = subprocess.run(docker_cmd, stdout=f, stderr=subprocess.STDOUT, text=True)
             
             if proc.returncode != 0:
-                # If it fails, print the last few lines of the log to the console for debugging
                 console.print(f"[red]Docker exited with code {proc.returncode}. Check logs.[/red]")
             
             return proc.returncode
@@ -98,7 +96,6 @@ def _run_locally(cfg: RunConfig, run_dir: Path, exec_dir: Path) -> int:
 
     with log_path.open("w", encoding="utf-8") as f:
         try:
-            # IMPORTANT: Run inside the execution directory
             proc = subprocess.run(
                 cmd_args, 
                 stdout=f, 
@@ -106,7 +103,7 @@ def _run_locally(cfg: RunConfig, run_dir: Path, exec_dir: Path) -> int:
                 text=True, 
                 check=False,
                 cwd=str(exec_dir),
-                env=env  # <--- Inject secrets
+                env=env 
             )
             return proc.returncode
         except Exception as e:

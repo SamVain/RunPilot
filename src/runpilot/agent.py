@@ -58,15 +58,16 @@ def _cycle(cfg: CloudConfig):
     # --- EXTRACT SECRETS ---
     secrets = job.get('env_vars', {})
     if secrets:
-        # Print keys only for security
         console.print(f"   🔒 Secrets injected: {list(secrets.keys())}")
-    # -----------------------
 
     run_cfg = RunConfig(
         name=job_config.get('name', 'remote-job'),
         image=job.get('image') or job_config.get('image'),
         entrypoint=job.get('entrypoint') or job_config.get('entrypoint'),
-        env_vars=secrets  # <--- POPULATE CONFIG
+        env_vars=secrets,
+        # --- MAP GPU FLAG ---
+        use_gpu=bool(job_config.get('use_gpu', False)) or bool(job_config.get('gpu', False))
+        # --------------------
     )
 
     console.print(f"   Task: {run_cfg.entrypoint}")
