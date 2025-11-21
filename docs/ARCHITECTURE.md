@@ -1,133 +1,51 @@
-# RunPilot Architecture
+# System Architecture
 
-This document describes the internal architecture of RunPilot v0.1.x and the direction for v0.2.x and v0.3.x.
+RunPilot uses a **Distributed, Stateless Architecture**.
 
-The design goal is a simple, reliable core that can support both local only use and a future RunPilot Cloud.
+It decouples the **Definition** of work (CLI) from the **Coordination** (Cloud) and the **Execution** (Agent).
 
-## High level overview
+![RunPilot Diagram](https://via.placeholder.com/800x400?text=RunPilot+Architecture)
 
-RunPilot has four main concerns:
+## 1. The Client (CLI)
+* **Role:** The interface for the Data Scientist.
+* **Responsibilities:**
+    * Authenticates via JWT.
+    * Parses `runpilot.yaml` config.
+    * Bundles source code into a `.tar.gz`.
+    * Requests a **Presigned S3 Upload URL** from the API.
+    * Uploads code directly to AWS S3 (bypassing the API server for speed).
 
-1. CLI
-2. Run management
-3. Execution (runners)
-4. Storage and metadata
+## 2. The Brain (RunPilot Cloud)
+* **Stack:** FastAPI + PostgreSQL + Stripe.
+* **Hosting:** Render.com.
+* **Responsibilities:**
+    * **Auth:** Gatekeeper for Pro users (Stripe Integration).
+    * **Queue:** Manages job status (`queued`, `running`, `success`, `failed`).
+    * **Secrets:** Encrypts and stores environment variables.
+    * **Persistence:** Generates secure, time-limited signatures for AWS S3 access.
 
-At a high level:
+## 3. The Storage (AWS S3)
+* **Role:** The "State" of the system.
+* **Location:** `eu-west-2` (London).
+* **Data:**
+    * **Artifacts:** Source code bundles.
+    * **Logs:** Execution logs uploaded by the Agent.
+    * **Models:** (Future) Trained model weights.
 
-- The CLI parses commands and options.
-- The run manager resolves configuration and allocates a run id.
-- A runner executes the job (Docker or local process).
-- Storage writes `run.json`, `logs.txt` and optional `metrics.json` and artifacts.
+## 4. The Muscle (Agent)
+* **Stack:** Python + Docker + NVIDIA Container Toolkit.
+* **Hosting:** Anywhere (Localhost, AWS EC2, On-Prem Cluster).
+* **Responsibilities:**
+    * Polls the Cloud API for `queued` jobs.
+    * Downloads artifacts from S3 using Presigned URLs.
+    * **Secrets Injection:** Injects decrypts env vars into the container.
+    * **Hardware Access:** Mounts NVIDIA GPUs if `gpu: true` is set.
+    * **Isolation:** Runs code inside ephemeral Docker containers.
 
-## Components
+## The "Golden Loop" Data Flow
 
-### CLI
-
-Responsibilities:
-
-- Parse subcommands such as `run`, `list`, `show`.
-- Load config files.
-- Validate user input before execution.
-- Call into the run manager.
-
-The CLI should remain thin. Business logic lives in internal modules so that:
-
-- It can be reused by tests.
-- Future API or daemon processes can reuse the same logic.
-
-### Run manager
-
-Responsibilities:
-
-- Allocate unique run ids.
-- Create the run directory under `~/.runpilot/runs/<run-id>`.
-- Persist initial metadata (`run.json` skeleton).
-- Select and configure the runner.
-- Track status transitions such as `pending`, `running`, `success`, `failed`.
-
-The run manager is the main integration point between CLI, runners and storage.
-
-### Runners
-
-Runners implement a common interface, for example:
-
-- `prepare(run, config)`
-- `execute(run, config)`
-- `finalise(run, result)`
-
-Current runners:
-
-- Docker runner:
-  - Uses a container image.
-  - Mounts the run directory if needed.
-  - Captures stdout and stderr to `logs.txt`.
-
-- Local runner:
-  - Executes a command as a subprocess.
-  - Used as a fallback if Docker is not available.
-
-Future runners might include:
-
-- Remote runner for RunPilot Cloud.
-- GPU aware runners.
-- Queue based runners.
-
-### Storage layout
-
-By default storage is filesystem based:
-
-```text
-~/.runpilot/runs/
-  <run-id>/
-    run.json
-    logs.txt
-    metrics.json        (optional)
-    outputs/            (optional)
-      ...
-```
-
-The directory name is the primary key for the run.
-
-`run.json` is the canonical metadata record. It is written by the run manager and updated as the run progresses.
-
-In later versions an optional SQLite or remote backend may index runs. The on disk layout is still treated as the source of truth.
-
-## Metrics
-Metrics are produced by the training job and written into `metrics.json` inside the run directory.
-
-Design Goals:
-- Simple JSON structure.
-- Easy to read in CLI or upload to a service.
-- Stable across versions.
-
-A proposed schema for v0.2.x is described in `docs/METRICS.md`
-
-## Configuration
-For v0.1.x configuration is a YAML file with fields such as:
-- `name`
-- `image`
-- `entrypoint`
-- `params`
-- `env`
-- `tags`
-
-In v0.2.x and later RunPilot will support both:
-- Per run configs.
-- A project level config file that can define reusable templates.
-
-The config model should be:
-- Human writable.
-- Stable over time.
-- Easy to represent in JSON for a future API.
-
-## Cloud Considerations
-The architecture is shaping towards a future where:
-- The CLI can sync run metadata with a remote control plane.
-- The same run schema is used locally and in the cloud.
-- A remote runner can execute jobs while still writing to logical equivalents of run.json, logs.txt and `metrics.json`.
-
-This influences current decisions:
-- Use simple, explicit schemas.
-- Avoid coupling to a particular database.
-- Keep runners behind an interface.
+1.  **Submit:** User runs `runpilot submit`. Code is zipped and sent to S3. Job is added to Postgres Queue.
+2.  **Claim:** Agent polls API, sees job, claims it. Status -> `running`.
+3.  **Fetch:** Agent downloads code from S3.
+4.  **Execute:** Agent runs Docker. Stream logs to local file.
+5.  **Report:** Agent uploads logs to S3 and updates API status -> `success`.

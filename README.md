@@ -2,46 +2,29 @@
 
 **The Universal Control Plane for AI/ML Compute.**
 
-RunPilot is an open-core developer tool for defining, running, tracking, and orchestrating computational jobs.
-
-It starts as a local experiment logger on your laptop and scales to become a remote execution engine for your GPU clusters.
+RunPilot is an infrastructure-agnostic orchestration tool. It allows you to define a job locally, inject secrets securely, and execute it anywhere—from your laptop to a GPU cluster in the cloud.
 
 ### Status
-- **CLI**: `v0.2.0` (Stable Beta)
-- **Cloud**: `Early Access`
+- **Version:** `v0.3.0` (Stable)
+- **Platform:** Production (Render + AWS)
+- **License:** Apache 2.0
 
 ---
 
 ## 🚀 Why RunPilot?
 
-Machine Learning infrastructure is a mess of bash scripts, SSH connections, and uncommitted changes.
+Data Scientists shouldn't have to manage Kubernetes manifests, Dockerfiles, or SSH keys just to run a training script.
 
-RunPilot standardizes this:
+RunPilot standardizes the workflow:
 1.  **Define** your job in a simple YAML.
-2.  **Run** it locally for debugging (reproducibility enforced).
-3.  **Submit** it to a remote GPU agent with a single command.
+2.  **Submit** it to the RunPilot Cloud.
+3.  **Execute** it on any connected Agent (CPU or GPU).
 
-We decouple the **definition** of work from the **execution** of work.
-
-## ✨ Features
-
-### 1. Local Reproducibility (Free & Open Source)
-Stop asking "which parameters did I use?". RunPilot captures everything automatically.
-- **Automatic Tracking:** Captures logs, config, git state, and exit codes.
-- **Smart Runner:** Uses Docker if available, gracefully falls back to local processes.
-- **Experiment History:** `runpilot list` and `runpilot show` provide a local database of your work.
-
-### 2. Cloud Sync & Collaboration (RunPilot Cloud)
-Sync your local runs to the hosted dashboard to share with your team.
-- **Central Dashboard:** Visualize metrics and compare runs.
-- **Artifact Storage:** Backup code bundles and model weights.
-- **Team Visibility:** See what your colleagues are running.
-
-### 3. Remote Orchestration (The Agent)
-Turn any machine (AWS instance, on-prem server, gaming PC) into a worker.
-- **Bundling:** RunPilot automatically packages your code and requirements.
-- **Queueing:** Submit jobs to a centralized queue.
-- **Execution:** The RunPilot Agent pulls the job, runs it in a sandbox, and streams logs back to you.
+**Key Features:**
+* **Universal Compute:** Works on AWS, GCP, Azure, or your on-prem gaming PC.
+* **Secrets Management:** Securely inject `.env` vars into remote containers.
+* **Artifact Persistence:** Automatic S3 code bundling and result storage.
+* **GPU Native:** Flag-based GPU access (`gpu: true`).
 
 ---
 
@@ -49,53 +32,42 @@ Turn any machine (AWS instance, on-prem server, gaming PC) into a worker.
 
 ### 1. Installation
 ```bash
-pip install runpilot
+pip install git+https://github.com/SamVain/RunPilot.git
 ```
 
-### 2. Define a job (runpilot.yaml)
-```yaml
-name: training-run
-image: python:3.11-slim
-entrypoint: python train.py
-params:
-  epochs: 10
-  lr: 0.001
-```
-
-### 3. Run locally
-```bash
-runpilot run runpilot.yaml
-```
-Result: Runs on your machine, captures logs to `~/.runpilot/runs/`
-
-### 4. Connect to Cloud (Optional)
+### 2. Login (Requires Pro Account)
+RunPilot Cloud is a paid service for managed orchestration.
 ```bash
 runpilot login
-runpilot init  # Select your project
-runpilot sync <run_id>
+# Follow the prompt to pay and authenticate
 ```
 
-### 5. Run Remotely
-Start an agent on your GPU server:
+### 3. Define a Job (`runpilot.yaml`)
+```yaml
+name: training-run
+image: pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+gpu: true  # <--- Request NVIDIA GPU
+entrypoint: python train.py
 ```
-runpilot agent
+
+### 4. Submit
+```bash
+runpilot submit runpilot.yaml --env-file .env
 ```
-Submit from your laptop:
-```
-runpilot submit runpilot.yaml
-```
-Result: RunPilot bundles your code, uploads it, and the Agent executes it immediately.
+
+See the full [Quickstart Guide](docs/QUICKSTART.md) for details on setting up Agents.
 
 ---
 
 ## 🏗️ Architecture
+
 RunPilot consists of three components:
-1. **Client CLI:** Manages local state, bundles artifacts, and communicates with the API.
-2. **Cloud (Server):** Stores run history, manages the job queue, and handles artifact storage.
-3. **Agent:** Polls the Cloud for `queued` jobs, downloads the code bundle, and executes it in a sandbox.
+1.  **Client (CLI):** Bundles code, encrypts secrets, and talks to the API.
+2.  **Cloud (API):** The "Brain". Manages queues, users, and S3 storage links.
+3.  **Agent (Worker):** The "Muscle". Polls for jobs and runs them in Docker.
 
 ## Contributing
-RunPilot is open source (Apache 2.0). We welcome PRs for the CLI and Local Runner.
+RunPilot CLI is open source. We welcome PRs!
 
 ## License
-RunPilot is licensed under the Apache 2.0 License. See LICENSE for details.
+Apache 2.0

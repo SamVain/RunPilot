@@ -1,0 +1,4 @@
+name: gpu-check
+image: ubuntu:22.04
+gpu: true
+entrypoint: echo "Checking GPU..."

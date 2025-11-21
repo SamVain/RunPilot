@@ -1,63 +1,38 @@
-# Configuration format
+# Configuration Reference
 
-RunPilot uses YAML configuration files to describe runs.
+The `runpilot.yaml` file is the blueprint for your training job.
 
-## Basic schema
-
-Minimal example:
-
+## Minimal Example
 ```yaml
-name: "mnist-cnn-baseline"
-image: "python:3.11-slim"
-entrypoint: "python train.py"
-params:
-  learning_rate: 0.001
-  batch_size: 64
-  epochs: 10
-env:
-  PYTHONUNBUFFERED: "1"
-tags:
-  - "mnist"
-  - "cnn"
-  - "baseline"
-```
-Fields:
-- `name`: string. Human friendly name for the run.
-- `image`: string. Container image to use when Docker is enabled.
-- `entrypoint`: string. Command that starts the training job.
-- `params`: map of key value pairs. Hyperparameters or configuration keys that should be recorded.
-- `env`: map of environment variables to set for the run. Extra environment variables to set for the process.
-- `tags`: list of strings. Free form labels for filtering and search later.
-
-## Advanced fields (future)
-You may want to support these later:
-- `volumes`: list of host to container mounts.
-- `resources`: hints such as gpu: 1 or cpu: 4.
-- `workdir`: working directory inside the container.
-
-## Project Level Config
-In v0.2.x RunPilot should support a project level file such as `runpilot.yaml` in the repository root.
-This file can declare named configurations:
-
-```yaml
-runs:
-  mnist-baseline:
-    image: "python:3.11-slim"
-    entrypoint: "python train.py"
-    params:
-      learning_rate: 0.001
-      batch_size: 64
-
-  mnist-low-lr:
-    extends: mnist-baseline
-    params:
-      learning_rate: 0.0001
-
+name: my-experiment
+image: python:3.11-slim
+entrypoint: python train.py
 ```
 
-Then the CLI could support:
+## GPU Example
+```yaml
+name: deep-learning-job
+image: pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+gpu: true
+entrypoint: python train.py --epochs 100
+```
+
+## Schema
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `name` | string | **Required.** Unique name for the run directory. |
+| `image` | string | **Required.** Docker image to use (e.g., `ubuntu:22.04`). |
+| `entrypoint` | string | **Required.** The command to run inside the container. |
+| `gpu` | boolean | If `true`, requests NVIDIA GPU access. (Default: `false`) |
+
+## Secrets & Environment Variables
+
+Do **not** commit secrets to `runpilot.yaml`.
+Instead, use a local `.env` file and submit it securely:
+
 ```bash
-runpilot run mnist-baseline
+runpilot submit runpilot.yaml --env-file .env
 ```
 
-This is not implemented yet but the schema is chosen to make it easy to add without breaking existing configs.
+The agent will inject these variables into the Docker container at runtime.
