@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+# TODO: Add support for multiple cloud profiles (work, personal, etc.)
+# TODO: Implement config encryption for sensitive tokens
+# TODO: Add support for environment variable overrides
+# TODO: Implement config migration for schema changes
+# TODO: Add support for organization-level config sharing
+# TODO: Implement config validation on load
+# TODO: Add support for config file permissions checking
+# TODO: Implement config sync with runpilot-cloud for team settings
+# TODO: Add support for config expiry warnings (token expiration)
+# TODO: Implement config backup and restore functionality
+
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -17,6 +28,10 @@ CONFIG_FILENAME = "cloud.yaml"
 
 @dataclass
 class CloudConfig:
+    # TODO: Add refresh_token field for token renewal
+    # TODO: Add expires_at field for token expiration tracking
+    # TODO: Add organization_id field for org context
+    # TODO: Add region field for API endpoint selection
     api_base_url: str
     token: str
     default_project: Optional[str] = None

@@ -26,6 +26,10 @@ RunPilot standardizes the workflow:
 * **Artifact Persistence:** Automatic S3 code bundling and result storage.
 * **GPU Native:** Flag-based GPU access (`gpu: true`).
 
+<!-- TODO: Add feature comparison table (CLI vs runpilot-cloud Pro vs Enterprise) -->
+<!-- TODO: Add quick demo video/GIF showing submit -> execute flow -->
+<!-- TODO: Add badges for PyPI version, downloads, test status -->
+
 ---
 
 ## 🛠️ Quickstart
@@ -66,8 +70,21 @@ RunPilot consists of three components:
 2.  **Cloud (API):** The "Brain". Manages queues, users, and S3 storage links.
 3.  **Agent (Worker):** The "Muscle". Polls for jobs and runs them in Docker.
 
+<!-- TODO: Add architecture diagram as an image -->
+<!-- TODO: Add link to detailed architecture documentation -->
+
 ## Contributing
 RunPilot CLI is open source. We welcome PRs!
 
+<!-- TODO: Add CONTRIBUTING.md with guidelines -->
+<!-- TODO: Add CODE_OF_CONDUCT.md -->
+<!-- TODO: Add issue templates for bugs and feature requests -->
+<!-- TODO: Add PR template with checklist -->
+
 ## License
 Apache 2.0
+
+<!-- TODO: Add section for runpilot-cloud subscription tiers and pricing -->
+<!-- TODO: Add FAQ section for common questions -->
+<!-- TODO: Add troubleshooting guide -->
+<!-- TODO: Add changelog link -->

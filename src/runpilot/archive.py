@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+# TODO: Add support for partial exports (only metadata, only logs, etc.)
+# TODO: Implement archive compression level configuration
+# TODO: Add support for encrypted archives for sensitive data
+# TODO: Implement archive format versioning for backwards compatibility
+# TODO: Add support for exporting to cloud storage (S3, GCS)
+# TODO: Implement archive signing for integrity verification
+# TODO: Add support for importing from URLs (http://, s3://)
+# TODO: Implement archive merging for combining multiple runs
+# TODO: Add support for archive metadata (description, tags)
+# TODO: Implement archive streaming for large datasets
+
 import tarfile
 from pathlib import Path
 from typing import Optional

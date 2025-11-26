@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+# TODO: Add schema validation with detailed error messages (consider pydantic)
+# TODO: Support YAML anchors and aliases for config reuse
+# TODO: Add environment variable interpolation (${VAR_NAME})
+# TODO: Support config inheritance (base config + overrides)
+# TODO: Add validation for Docker image name format
+# TODO: Support multiple entrypoints for multi-stage jobs
+# TODO: Add support for resource limits (memory, CPU, GPU count)
+# TODO: Implement config versioning for backwards compatibility
+# TODO: Add support for secrets reference (e.g., ${{ secrets.API_KEY }})
+# TODO: Support conditional configuration based on target environment
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -10,6 +21,11 @@ import yaml
 @dataclass
 class RunConfig:
     """Minimal representation of a RunPilot config."""
+    # TODO: Add timeout field for job execution limits
+    # TODO: Add retry_count field for automatic job retries
+    # TODO: Add depends_on field for job dependencies
+    # TODO: Add artifacts field for output file patterns
+    # TODO: Add resource_class field for tier-based compute selection
 
     name: str
     image: str

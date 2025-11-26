@@ -1,3 +1,14 @@
+# TODO: Implement agent registration with unique agent_id for fleet management
+# TODO: Add agent heartbeat mechanism to track online/offline status
+# TODO: Support agent labels/tags for job routing (e.g., gpu:a100, region:eu)
+# TODO: Implement agent resource reporting (CPU, memory, GPU utilization)
+# TODO: Add concurrent job execution support with configurable parallelism
+# TODO: Implement job timeout and automatic cleanup of stale containers
+# TODO: Add agent auto-scaling integration with runpilot-cloud
+# TODO: Support agent authentication tokens with scope-limited permissions
+# TODO: Implement agent logs streaming to runpilot-cloud dashboard
+# TODO: Add graceful shutdown with job completion before exit
+
 import time
 import requests
 import tarfile
@@ -15,6 +26,13 @@ def start_agent(poll_interval: int = 5):
     """
     Main Agent Loop: Poll -> Claim -> Run -> Report.
     """
+    # TODO: Add --concurrency flag to run multiple jobs in parallel
+    # TODO: Implement exponential backoff for failed API requests
+    # TODO: Add --labels flag for job filtering (e.g., "gpu:nvidia,tier:pro")
+    # TODO: Support --max-jobs flag to limit total jobs before exiting
+    # TODO (DAY 2): Add --once flag for single-job execution then exit
+    # TODO (DAY 2): Implement auto-shutdown call to /v1/runs/{id}/instance/shutdown
+    # TODO (DAY 2): Report EC2 instance metadata to cloud on startup
     cfg = load_cloud_config()
     if not cfg or not cfg.token:
         console.print("[red]Agent failed: Not logged in. Run 'runpilot login'.[/red]")
@@ -36,6 +54,11 @@ def start_agent(poll_interval: int = 5):
         time.sleep(poll_interval)
 
 def _cycle(cfg: CloudConfig):
+    # TODO: Implement job priority queue sorting
+    # TODO: Add support for job retries on transient failures
+    # TODO: Implement container image caching for faster cold starts
+    # TODO: Add support for custom Docker networks for job isolation
+    # TODO: Implement output artifact upload to S3 after job completion
     headers = {"Authorization": f"Bearer {cfg.token}"}
 
     # 1. Ask for work

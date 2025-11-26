@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+# TODO: Implement run garbage collection (delete old runs after N days)
+# TODO: Add support for run tagging and filtering
+# TODO: Implement run search by name, status, date range
+# TODO: Add support for run comparison (side-by-side diffs)
+# TODO: Implement run versioning for reproducibility
+# TODO: Add support for remote storage backends (S3, GCS, Azure Blob)
+# TODO: Implement run archival to cold storage for cost optimization
+# TODO: Add support for run sharing via public links (Pro feature)
+# TODO: Implement run encryption at rest for sensitive data
+# TODO: Add support for run annotations and notes
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -96,6 +107,11 @@ def write_run_metadata(
       finished_at set when status is finished or failed
       exit_code   numeric exit code if known
     """
+    # TODO: Add git commit SHA and branch to metadata for reproducibility
+    # TODO: Store full config file content for audit trail
+    # TODO: Add duration field (finished_at - created_at)
+    # TODO: Store system info (OS, Docker version, GPU model)
+    # TODO: Add parent_run_id for tracking job lineage
     meta_path = run_dir / "run.json"
     meta = _load_existing_metadata(meta_path)
 
