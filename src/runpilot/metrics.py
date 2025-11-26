@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+# TODO: Add support for custom metric types (gauge, counter, histogram)
+# TODO: Implement metric aggregation across distributed jobs
+# TODO: Add support for metric labels/dimensions for filtering
+# TODO: Implement metric export to Prometheus/Grafana format
+# TODO: Add support for TensorBoard log parsing
+# TODO: Implement metric alerting thresholds (e.g., loss > 0.5)
+# TODO: Add support for W&B (Weights & Biases) integration
+# TODO: Implement metric comparison across runs
+# TODO: Add support for MLflow metrics format
+# TODO: Implement real-time metric streaming to runpilot-cloud dashboard
+
 import json
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -12,6 +23,9 @@ METRICS_FILENAME = "metrics.json"
 
 @dataclass
 class Metrics:
+    # TODO: Add support for metric metadata (description, unit, etc.)
+    # TODO: Implement metric versioning for schema changes
+    # TODO: Add support for nested/hierarchical metrics
     run_id: str
     summary: Dict[str, float]
     time_series: Dict[str, List[float]] | None = None

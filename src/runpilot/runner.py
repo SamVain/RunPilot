@@ -1,4 +1,16 @@
 from __future__ import annotations
+
+# TODO: Implement container health checks during execution
+# TODO: Add support for Docker Compose for multi-container jobs
+# TODO: Implement log streaming to runpilot-cloud in real-time
+# TODO: Add container resource limits (memory, CPU) enforcement
+# TODO: Support custom Docker networks for job isolation
+# TODO: Implement container caching for faster subsequent runs
+# TODO: Add support for Podman as Docker alternative
+# TODO: Implement job checkpointing for long-running tasks
+# TODO: Add support for Singularity containers (HPC environments)
+# TODO: Implement container cleanup on job cancellation
+
 import subprocess
 import shlex
 import os
@@ -38,6 +50,12 @@ def _check_docker() -> bool:
         return False
 
 def _run_in_docker(cfg: RunConfig, run_dir: Path, exec_dir: Path) -> int:
+    # TODO: Add container image pull progress reporting
+    # TODO: Implement image layer caching across runs
+    # TODO: Add support for private Docker registries with auth
+    # TODO: Implement container memory/CPU profiling
+    # TODO: Add support for mounting additional volumes via config
+    # TODO: Implement log rotation for long-running jobs
     console.print(f"[blue]🐳 Starting Docker ({cfg.image})...[/blue]")
     log_path = run_dir / "logs.txt"
     

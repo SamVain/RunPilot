@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+# TODO: Add support for `runpilot logs <run_id>` command to stream/view logs
+# TODO: Add support for `runpilot cancel <run_id>` command to cancel queued/running jobs
+# TODO: Add support for `runpilot status` command for quick status overview of recent jobs
+# TODO: Implement `runpilot upgrade` command for self-updating the CLI
+# TODO: Add shell completion support (bash, zsh, fish) via `runpilot completion`
+# TODO: Implement `runpilot config` command for managing local settings
+# TODO: Add support for job templates via `runpilot template` subcommand
+# TODO: Implement `runpilot watch <run_id>` for real-time job monitoring
+# TODO: Add `runpilot ssh <agent_id>` for debugging remote agents (Pro feature)
+# TODO: Integrate with runpilot-cloud subscription tiers for feature gating
+
 import click
 import argparse
 import json
@@ -56,6 +67,10 @@ def parse_env_file(path: str) -> dict[str, str]:
     return env_vars
 
 def build_parser() -> argparse.ArgumentParser:
+    # TODO: Migrate from argparse to Click for better UX and composability
+    # TODO: Add --verbose/-v flag for debug output across all commands
+    # TODO: Add --quiet/-q flag for minimal output (CI/CD friendly)
+    # TODO: Add --output-format flag (json, yaml, table) for all list commands
     parser = argparse.ArgumentParser(prog="runpilot")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -214,6 +229,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # ------------------------------
     
+    # TODO (DAY 2): Add --once flag to agent parser for single-job execution
+    # TODO (DAY 2): Add --instance-id flag for EC2 metadata reporting
+    # TODO: Add --poll-interval flag to customize polling frequency
     subparsers.add_parser(
         "agent",
         help="Start a worker agent to execute remote jobs",
@@ -280,6 +298,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _handle_run_command(config_ref: str) -> None:
+    # TODO: Add --dry-run flag to validate config without executing
+    # TODO: Add --attach flag to stream logs in real-time during execution
+    # TODO: Support environment variable interpolation in config files
+    # TODO: Add support for multi-step pipelines (run multiple commands in sequence)
     # Resolve either a direct path or a named run from runpilot.yaml
     config_path = resolve_config_path(config_ref)
     cfg = load_config(config_path)
@@ -422,6 +444,12 @@ def _handle_login_command(
     """
     Configure RunPilot Cloud credentials.
     """
+    # TODO: Add OAuth2 login flow with browser-based authentication
+    # TODO: Support SSO/SAML for enterprise customers (runpilot-cloud integration)
+    # TODO: Add MFA/2FA support for enhanced security
+    # TODO: Implement token refresh mechanism for expired tokens
+    # TODO: Add `runpilot logout` command to clear credentials
+    # TODO: Support multiple profiles/accounts with --profile flag
     from . import cloud_client
     from pathlib import Path
 
@@ -682,6 +710,13 @@ def _handle_init_command() -> int:
     return 0
 
 def _handle_submit_command(config_ref: str, env_file: str | None) -> int:
+    # TODO: Add --priority flag for job prioritization (Pro/Enterprise feature)
+    # TODO: Support --wait flag to block until job completes
+    # TODO: Add --notify flag to send email/Slack notification on completion
+    # TODO: Implement job dependencies (--depends-on <job_id>)
+    # TODO: Add --resource-limits flag (memory, CPU cores, GPU count)
+    # TODO: Support job scheduling with --schedule flag (cron syntax)
+    # TODO: Add cost estimation before submission (runpilot-cloud tier-based)
     from . import cloud_client
     from .config import load_config, resolve_config_path
     from .project import load_local_project_binding

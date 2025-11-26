@@ -1,3 +1,14 @@
+# TODO: Add support for project templates with pre-configured settings
+# TODO: Implement project-level default configurations
+# TODO: Add support for project team members and permissions (Pro feature)
+# TODO: Implement project activity feed and audit log
+# TODO: Add support for project webhooks for CI/CD integration
+# TODO: Implement project quotas and usage limits based on runpilot-cloud tier
+# TODO: Add support for project environments (dev, staging, prod)
+# TODO: Implement project billing integration with runpilot-cloud
+# TODO: Add support for project-level secrets management
+# TODO: Implement project cloning/forking functionality
+
 from dataclasses import dataclass
 from typing import Optional
 import yaml
@@ -5,8 +16,12 @@ from pathlib import Path
 
 PROJECT_CONFIG_FILE = ".runpilot/project.yaml"
 
+
 @dataclass
 class LocalProjectBinding:
+    # TODO: Add environment field (dev, staging, prod)
+    # TODO: Add default_image field for project-wide image defaults
+    # TODO: Add default_gpu field for GPU preferences
     project_id: int
     project_name: str
     api_base_url: str

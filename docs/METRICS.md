@@ -7,6 +7,9 @@ Create `docs/METRICS.md`:
 
 RunPilot stores metrics for a run in `metrics.json` inside the run directory.
 
+<!-- TODO: Add support for real-time metrics streaming to runpilot-cloud -->
+<!-- TODO: Implement metric visualization in dashboard -->
+
 The goals are:
 
 - Simple JSON file.
@@ -42,10 +45,25 @@ Fields:
 - `tags`: optional list of strings, copied from `run.json` if available.
 - `recorded_at`: ISO 8601 timestamp of when metrics were written.
 
+<!-- TODO: Add support for metric metadata (description, unit, visualization type) -->
+<!-- TODO: Add support for nested/hierarchical metrics -->
+<!-- TODO: Implement metric versioning for schema changes -->
+
 ## Usage in CLI
 The runpilot metrics command can:
 - Print `summary` metrics in a table.
 - Optionally show basic statistics for time series.
 - In future, export metrics to other tools.
+
+<!-- TODO: Add `runpilot metrics compare <run1> <run2>` command -->
+<!-- TODO: Add `runpilot metrics export --format prometheus` command -->
+<!-- TODO: Add `runpilot metrics plot <run_id>` command for terminal charts -->
+
+## Integrations
+
+<!-- TODO: Add TensorBoard log parsing support -->
+<!-- TODO: Add W&B (Weights & Biases) integration -->
+<!-- TODO: Add MLflow metrics format support -->
+<!-- TODO: Add Prometheus/Grafana export format -->
 
 This is enough to implement and test.

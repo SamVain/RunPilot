@@ -1,3 +1,14 @@
+# TODO: Implement retry logic with exponential backoff for all API calls
+# TODO: Add request/response logging for debugging (when --verbose is enabled)
+# TODO: Implement connection pooling for better performance
+# TODO: Add support for API versioning (v1, v2, etc.)
+# TODO: Implement webhook registration for real-time job status updates
+# TODO: Add support for API rate limiting and quota management
+# TODO: Implement client-side caching for frequently accessed data
+# TODO: Add support for runpilot-cloud subscription tier validation
+# TODO: Implement file chunking for large artifact uploads (>100MB)
+# TODO: Add telemetry/analytics for usage tracking (opt-in)
+
 import requests
 import os
 from typing import Optional, Dict, Any, List
@@ -109,6 +120,12 @@ def submit_job(cfg: CloudConfig, project_id: str, run_config: Dict[str, Any], so
     """
     Bundles current directory, creates a 'queued' run with secrets, and uploads code.
     """
+    # TODO: Add .runpilotignore file support for excluding files from bundle
+    # TODO: Implement incremental uploads (only changed files)
+    # TODO: Add bundle size limits based on runpilot-cloud subscription tier
+    # TODO: Support Git-based code fetching as alternative to bundling
+    # TODO: Add progress bar for large file uploads
+    # TODO: Implement client-side encryption for sensitive code
     console.print(f"[bold blue]RunPilot Cloud[/bold blue]: Preparing remote submission...")
     url = f"{cfg.api_base_url}/v1/runs"
     
@@ -190,6 +207,8 @@ def update_remote_run_status(cfg: CloudConfig, cloud_run_id: str, status: str):
     """
     Reports the final status of a job back to the Cloud.
     """
+    # TODO (DAY 2): Call instance shutdown endpoint after status update
+    # TODO (DAY 2): Add instance_id parameter for EC2 cleanup
     url = f"{cfg.api_base_url}/v1/runs/{cloud_run_id}"
     
     from datetime import datetime, timezone
