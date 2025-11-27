@@ -1,11 +1,14 @@
 import requests
 import os
-from typing import Optional, Dict, Any, List
+import pathlib
+from typing import Optional, Dict, Any, List, Union
 from rich.console import Console
 from .cloud_config import CloudConfig, save_cloud_config
 import tarfile
 import io
 import secrets
+
+PathLike = Union[str, pathlib.Path]
 
 console = Console()
 
@@ -217,20 +220,56 @@ def upload_run_logs(cfg: CloudConfig, cloud_run_id: str, log_path: str):
             files = {"file": ("logs.txt", f, "text/plain")}
             resp = requests.post(url, files=files, headers={"Authorization": f"Bearer {cfg.token}"})
             resp.raise_for_status()
-    except Exception as e:
-        console.print(f"[red]Log upload failed:[/red] {e}")
-        
-def upload_run_logs(cfg: CloudConfig, cloud_run_id: str, log_path: str):
-    """
-    Uploads the local logs.txt to the Cloud.
-    """
-    url = f"{cfg.api_base_url}/v1/runs/{cloud_run_id}/logs"
-    
-    try:
-        with open(log_path, "rb") as f:
-            files = {"file": ("logs.txt", f, "text/plain")}
-            resp = requests.post(url, files=files, headers={"Authorization": f"Bearer {cfg.token}"})
-            resp.raise_for_status()
             console.print("[green]   ✔ Logs uploaded.[/green]")
     except Exception as e:
         console.print(f"[red]Log upload failed:[/red] {e}")
+
+
+def upload_run_metrics_file(cfg: CloudConfig, cloud_run_id: str, metrics_path: PathLike):
+    """Upload metrics.json file to the Cloud."""
+    url = f"{cfg.api_base_url}/v1/runs/{cloud_run_id}/metrics"
+    try:
+        with open(metrics_path, "rb") as f:
+            files = {"file": ("metrics.json", f, "application/json")}
+            resp = requests.put(url, files=files, headers={"Authorization": f"Bearer {cfg.token}"})
+            resp.raise_for_status()
+            console.print("[green]   ✔ Metrics uploaded.[/green]")
+    except Exception as e:
+        console.print(f"[red]Metrics upload failed:[/red] {e}")
+
+
+def upload_run_artifacts(cfg: CloudConfig, cloud_run_id: str, artifacts_dir: PathLike):
+    """Recursively upload all files in artifacts directory."""
+    artifacts_dir = pathlib.Path(artifacts_dir)
+    uploaded = 0
+    for path in artifacts_dir.rglob("*"):
+        if path.is_dir():
+            continue
+        rel_key = path.relative_to(artifacts_dir).as_posix()
+        url = f"{cfg.api_base_url}/v1/runs/{cloud_run_id}/artifacts/upload"
+        try:
+            with open(path, "rb") as f:
+                resp = requests.put(
+                    url,
+                    headers={"Authorization": f"Bearer {cfg.token}"},
+                    files={"file": (rel_key, f, "application/octet-stream")},
+                    params={"key": rel_key},
+                )
+                resp.raise_for_status()
+                uploaded += 1
+        except Exception as e:
+            console.print(f"[red]Artifact upload failed ({rel_key}):[/red] {e}")
+    
+    if uploaded > 0:
+        console.print(f"[green]   ✔ {uploaded} artifact(s) uploaded.[/green]")
+
+
+def request_instance_shutdown(cfg: CloudConfig, cloud_run_id: str):
+    """Request EC2 instance termination after job completion."""
+    url = f"{cfg.api_base_url}/v1/runs/{cloud_run_id}/instance/shutdown"
+    try:
+        resp = requests.post(url, headers={"Authorization": f"Bearer {cfg.token}"})
+        resp.raise_for_status()
+        console.print("[green]   ✔ EC2 shutdown requested.[/green]")
+    except Exception as e:
+        console.print(f"[yellow]Shutdown request failed (may already be terminated):[/yellow] {e}")
