@@ -115,11 +115,34 @@ def _cycle(cfg: CloudConfig):
     status = "success" if exit_code == 0 else "failed"
     console.print(f"[bold]Job finished: {status} (Exit: {exit_code})[/bold]")
 
-    # 6. UPLOAD LOGS
+    # Import all upload helpers
+    from .cloud_client import (
+        upload_run_logs,
+        upload_run_metrics_file,
+        upload_run_artifacts,
+        request_instance_shutdown,
+    )
+
+    # 6. Upload logs
     log_path = run_dir / "logs.txt"
     if log_path.exists():
-        from .cloud_client import upload_run_logs
         upload_run_logs(cfg, cloud_id, str(log_path))
 
-    # 7. Report Status
+    # 7. Upload metrics if present
+    metrics_path = run_dir / "metrics.json"
+    if metrics_path.exists():
+        upload_run_metrics_file(cfg, cloud_id, str(metrics_path))
+
+    # 8. Upload any artifacts directory
+    artifacts_dir = run_dir / "artifacts"
+    if artifacts_dir.exists() and artifacts_dir.is_dir():
+        upload_run_artifacts(cfg, cloud_id, artifacts_dir)
+
+    # 9. Report final status
     update_remote_run_status(cfg, cloud_id, status)
+
+    # 10. Request EC2 shutdown if running in cloud mode
+    # Check if we're running on EC2 (indicated by env var or config)
+    if os.getenv("RUNPILOT_EC2_MODE", "").lower() in ("true", "1", "yes"):
+        console.print("   📴 Requesting EC2 shutdown...")
+        request_instance_shutdown(cfg, cloud_id)
